@@ -9,7 +9,7 @@
 | 正式環境 | `https://carbon.taux.io`，`/health` 回報 0.2.4，資料庫正常 |
 | 分支 | `main`，本機與 `origin/main` 相同。正式環境跑的是 `934133f`（0.2.4），之後的 commit 只改文件 |
 | Tag | `v0.2.4` 已推送 |
-| 官方 MCP Registry | `io.github.taux-io/carbon-mcp` 最新版本仍是 0.2.3。`v0.2.4` 的 `publish-mcp` 正等待 `mcp-registry` environment 核准，核准後才會發布 |
+| 官方 MCP Registry | `io.github.taux-io/carbon-mcp` 最新版本 0.2.4（2026-11-13 發布，狀態 active） |
 | 排程 | `30 19 * * *`（台灣時間 03:30），只有這一條 |
 | 測試 | 8 個檔案、238 項通過；`main` 的 CI 通過 |
 | 每日檢查 | 0.2.4 部署後手動觸發一次，通過；沒有未關閉的 `production-check` issue |
