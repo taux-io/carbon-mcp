@@ -1280,14 +1280,11 @@ Sitemap: ${SITE_ORIGIN}/sitemap.xml
 `;
 
 export const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${LOCALE_KEYS.map(
   (l) => `  <url>
     <loc>${SITE_ORIGIN}${LOCALES[l].path}</loc>
     <lastmod>${LASTMOD}</lastmod>
-${LOCALE_KEYS.map((o) => `    <xhtml:link rel="alternate" hreflang="${LOCALES[o].hreflang}" href="${SITE_ORIGIN}${LOCALES[o].path}"/>`).join("\n")}
-    <xhtml:link rel="alternate" hreflang="x-default" href="${SITE_ORIGIN}/"/>
   </url>`,
 ).join("\n")}
   <url>

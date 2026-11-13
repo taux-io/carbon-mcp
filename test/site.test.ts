@@ -45,6 +45,21 @@ describe("homepage", () => {
     }
   });
 
+  // 瀏覽器只要在 XML 文件裡看到 XHTML 命名空間的元素（例如 <xhtml:link>），就把整份文件當網頁排版，
+  // sitemap 於是顯示成一行擠在一起的文字。語系連結已經在每個頁面的 <head> 裡，sitemap 不需要重複。
+  it("keeps the sitemap free of XHTML-namespace elements so browsers show it as XML", () => {
+    expect(SITEMAP_XML).not.toContain("xhtml");
+    expect(SITEMAP_XML).toMatch(/^<\?xml version="1\.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+    for (const path of ["/", "/en", "/ja", "/privacy", "/tools", "/api/docs"]) expect(SITEMAP_XML).toContain(`<loc>https://carbon.taux.io${path}</loc>`);
+    expect((SITEMAP_XML.match(/<url>/g) ?? []).length).toBe(6);
+  });
+
+  it("carries the language alternates in every localized page head instead", () => {
+    for (const html of Object.values(PAGES)) {
+      for (const lang of ["zh-Hant", "en", "ja", "x-default"]) expect(html).toContain(`<link rel="alternate" hreflang="${lang}"`);
+    }
+  });
+
   it("links the privacy policy from every page and lists it in the sitemap", () => {
     for (const html of ALL_PAGES) expect(html).toContain('href="/privacy"');
     expect(SITEMAP_XML).toContain("<loc>https://carbon.taux.io/privacy</loc>");
@@ -148,11 +163,6 @@ describe("no invented numbers", () => {
 });
 
 describe("machine-readable files", () => {
-  it("lists all three homepages with hreflang alternates in the sitemap", () => {
-    for (const path of ["/", "/en", "/ja"]) expect(SITEMAP_XML).toContain(`<loc>https://carbon.taux.io${path}</loc>`);
-    for (const h of ["zh-Hant", "en", "ja", "x-default"]) expect(SITEMAP_XML).toContain(`hreflang="${h}"`);
-  });
-
   it("points robots.txt at the sitemap and keeps the MCP endpoint out of the crawl", () => {
     expect(ROBOTS_TXT).toContain("Sitemap: https://carbon.taux.io/sitemap.xml");
     expect(ROBOTS_TXT).toContain("Disallow: /mcp");
