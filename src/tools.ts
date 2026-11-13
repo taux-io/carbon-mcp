@@ -70,7 +70,7 @@ const blend = z
   })
   .describe("混合冷媒（例如 R-410A）。成分比例必須來自使用者或設備、冷媒的規格文件；本服務沒有內建任何冷媒的成分，請勿憑記憶填寫，不確定時請向使用者確認。");
 
-/** calculate_emissions 與清冊項目：單一係數（factor_id）或混合冷媒（refrigerant_blend），兩者擇一。 */
+/** calculate_emissions、calculate_batch、compare_emissions 與清冊項目：單一係數（factor_id）或混合冷媒（refrigerant_blend），兩者擇一。 */
 export const calcOrBlendShape = {
   ...calcShape,
   factor_id: calcShape.factor_id.optional(),
@@ -115,7 +115,7 @@ export const electricityShape = {
 };
 
 export const batchShape = {
-  items: z.array(calcSchema).min(1).max(MAX_BATCH).describe(`要計算的活動，最多 ${MAX_BATCH} 筆。`),
+  items: z.array(calcOrBlendSchema).min(1).max(MAX_BATCH).describe(`要計算的活動，最多 ${MAX_BATCH} 筆。每筆用 factor_id 或 refrigerant_blend 擇一。`),
 };
 
 export const inventoryItemSchema = calcOrBlendSchema.extend({
@@ -225,10 +225,10 @@ export const TOOLS: ToolDef[] = [
     name: "calculate_batch",
     title: "Calculate batch",
     description:
-      "Calculate several activities at once, each with its own factor and source. A total is given only when every item succeeded and the items share a gas basis and boundary type; otherwise the reason is stated. 批次計算多筆活動，逐筆回傳結果與來源。只有全部成功、氣體基礎與邊界類型一致時才提供合計，否則說明不提供的原因。",
+      "Calculate several activities at once, each with its own factor and source. A total is given only when every item succeeded and the items share a gas basis and boundary type; otherwise the reason is stated. An item may be a refrigerant blend such as R-410A: pass refrigerant_blend with the user-supplied composition instead of factor_id; it stays one row in the results, and its components count toward the total. 批次計算多筆活動，逐筆回傳結果與來源。只有全部成功、氣體基礎與邊界類型一致時才提供合計，否則說明不提供的原因。混合冷媒（如 R-410A）的項目可不給 factor_id，改以 refrigerant_blend 提供使用者確認過的成分比例；結果仍是一筆一列，合計時以各成分計入。",
     summary: { zh: "批次計算多筆活動，條件相容時才給合計。", en: "Calculate several activities; totals only when compatible.", ja: "複数の活動を一括計算します。条件が揃う場合のみ合計を返します。" },
     shape: batchShape,
-    run: (a, { db, now }) => calculateBatch(db, a.items.map(toRequest), now),
+    run: (a, { db, now }) => calculateBatch(db, a.items.map(toAnyRequest), now),
   }),
   def({
     name: "build_inventory",

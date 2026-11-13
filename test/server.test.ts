@@ -254,6 +254,65 @@ describe("refrigerant blends", () => {
   });
 });
 
+describe("refrigerant blends in batch and compare", () => {
+  const tool = async (name: string, args: Record<string, unknown>) => {
+    const res = await send(mcpRequest("legacy", "tools/call", { name, arguments: args }));
+    const payload = await readPayload(res);
+    return { isError: payload.result.isError === true, data: JSON.parse(payload.result.content[0].text) };
+  };
+  const leaked = { optional_context: { refrigerant: { basis: "leaked_amount" } } };
+  const gas = (id: string) => `moenv-gwp-2024-${id}`;
+  const blend = (...parts: [string, number | string][]) => ({ refrigerant_blend: { components: parts.map(([id, mass_percent]) => ({ factor_id: gas(id), mass_percent })) } });
+  const blendItem = (quantity: number, ...parts: [string, number | string][]) => ({ ...blend(...parts), quantity, quantity_unit: "kg", ...leaked });
+  const single = (id: string, quantity: number) => ({ factor_id: gas(id), quantity, quantity_unit: "kg", ...leaked });
+
+  describe("calculate_batch", () => {
+    it("keeps a blend as one row and adds its components to the total", async () => {
+      const { data } = await tool("calculate_batch", { items: [blendItem(10, ["hfc-32", 50], ["hfc-125", 50]), single("hfc-32", 10)] });
+      expect(data.results).toHaveLength(2);
+      expect(data.results[0]).toMatchObject({ index: 0, kind: "refrigerant_blend", emissions_kg: "19235" });
+      expect(data.results[0].composition).toHaveLength(2);
+      expect(data.results[1]).toMatchObject({ index: 1, factor_id: gas("hfc-32"), emissions_kg: "6770" });
+      expect(data.total).toMatchObject({ available: true, emissions_kg: "26005", emissions_gas_basis: "CO2e" });
+    });
+
+    it("fails only the invalid blend and withholds the total", async () => {
+      const { isError, data } = await tool("calculate_batch", { items: [single("hfc-32", 10), blendItem(10, ["hfc-32", 50], ["hfc-125", 40])] });
+      expect(isError).toBe(false);
+      expect(data.results[0].ok).toBe(true);
+      expect(data.results[1]).toMatchObject({ ok: false, error: { code: "invalid_composition" } });
+      expect(data.total.available).toBe(false);
+    });
+
+    it("reports a row that gives both or neither of factor_id and refrigerant_blend without rejecting the batch", async () => {
+      const { data } = await tool("calculate_batch", {
+        items: [
+          { ...single("hfc-32", 1), ...blend(["hfc-32", 50], ["hfc-125", 50]) },
+          { quantity: 1, quantity_unit: "kg" },
+          { ...blend(["hfc-32", 50], ["hfc-125", 50]), quantity: 10, quantity_unit: "kg" },
+          single("hfc-32", 10),
+        ],
+      });
+      expect(data.results.map((r: { ok: boolean; error?: { code: string } }) => r.error?.code ?? "ok")).toEqual(["invalid_request", "invalid_request", "missing_refrigerant_basis", "ok"]);
+      expect(data.total.available).toBe(false);
+    });
+
+    it("warns when two blends share a component, as it does for the same single factor twice", async () => {
+      const { data } = await tool("calculate_batch", { items: [blendItem(10, ["hfc-32", 50], ["hfc-125", 50]), blendItem(10, ["hfc-32", 50], ["hfc-134a", 50])] });
+      expect(data.total).toMatchObject({ available: true, emissions_kg: "29120" });
+      expect(data.total.warnings.join()).toContain("同一筆係數被用了不只一次");
+    });
+
+    it("accepts a blend over REST", async () => {
+      const res = await post("/api/v1/calculate/batch", { items: [blendItem(10, ["hfc-32", 50], ["hfc-125", 50]), single("hfc-32", 10)] });
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { results: { kind?: string }[]; total: { emissions_kg: string } };
+      expect(data.results[0].kind).toBe("refrigerant_blend");
+      expect(data.total.emissions_kg).toBe("26005");
+    });
+  });
+});
+
 describe("MCP transport guards", () => {
   it("rejects JSON-RPC batches before they reach the SDK", async () => {
     const res = await post("/mcp", [{ jsonrpc: "2.0", id: 1, method: "tools/list" }]);
