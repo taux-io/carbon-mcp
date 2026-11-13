@@ -1163,7 +1163,7 @@ export const PRIVACY_HTML: string = docShell(
 /**
  * 服務條款（/terms）。送件 Claude Directory 時表單可能要求。
  * 只寫服務實際的行為與網站上已公開的說法（免責聲明、資料授權、限流、版本保留）。
- * 準據法、管轄法院與賠償上限是法律上的選擇，刻意沒有寫；要加由維護者決定。
+ * 準據法與管轄法院由維護者決定（2026-11-13）。賠償上限是法律上的選擇，刻意沒有寫；要加由維護者決定。
  */
 export const TERMS_UPDATED = "2026-11-13";
 
@@ -1210,6 +1210,9 @@ export const TERMS_HTML: string = docShell(
 <li>這份條款可能更新，以本頁為準，頁首標示最後更新日期。</li>
 </ul>
 
+<h2>準據法與管轄</h2>
+<p>本條款以中華民國法律為準據法。因本服務或本條款所生的爭議，以臺灣臺北地方法院為第一審管轄法院。</p>
+
 <h2>隱私</h2>
 <p>本服務如何處理連線資料，見<a href="/privacy">隱私權政策</a>。</p>
 
@@ -1226,6 +1229,7 @@ export const TERMS_HTML: string = docShell(
 <li>Emission factors belong to the issuing agencies. Those marked with the Open Government Data License, version 1.0, are used under it (<a href="https://data.gov.tw/license">https://data.gov.tw/license</a>). Credit the source when you reuse them. The code is MIT licensed.</li>
 <li>Requests are rate limited by source IP. Stay within the limits, do not try to bypass them, and do not disrupt the service.</li>
 <li>Features may change and the service may stop. Superseded factor versions are kept, so pinned calculations stay reproducible while the service runs. These terms may be updated; the date at the top shows the latest version.</li>
+<li>These terms are governed by the laws of the Republic of China (Taiwan). The Taiwan Taipei District Court has jurisdiction as the court of first instance over any dispute arising from the service or these terms.</li>
 <li>Privacy: <a href="/privacy">/privacy</a>. Contact: <a href="${REPO}/issues">${REPO}/issues</a>.</li>
 </ul>
 </div>`,
