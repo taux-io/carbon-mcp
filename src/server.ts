@@ -12,7 +12,7 @@ import { handleApi, readBounded } from "./api";
 import { APPLE_ICON_BASE64, FAVICON_ICO_BASE64, FAVICON_SVG } from "./icons";
 import { OG_IMAGE_BASE64 } from "./og-image";
 import { ATTRIBUTION, ping, SERVICE_NAME, VERSION } from "./service";
-import { API_DOCS_HTML, COPY_SCRIPT_HASH, LLMS_FULL_TXT, LLMS_TXT, PRIVACY_HTML, renderPage, ROBOTS_TXT, SITEMAP_XML, TOOLS_HTML } from "./site";
+import { API_DOCS_HTML, COPY_SCRIPT_HASH, LLMS_FULL_TXT, LLMS_TXT, PRIVACY_HTML, renderPage, ROBOTS_TXT, SITEMAP_XML, TERMS_HTML, TOOLS_HTML } from "./site";
 import { runScheduled } from "./sync";
 import { TOOLS } from "./tools";
 
@@ -97,6 +97,7 @@ const STATIC_ROUTES: Record<string, { body: string | Uint8Array; type: string; c
   "/tools": { body: TOOLS_HTML, type: HTML },
   "/api/docs": { body: API_DOCS_HTML, type: HTML },
   "/privacy": { body: PRIVACY_HTML, type: HTML },
+  "/terms": { body: TERMS_HTML, type: HTML },
   "/llms.txt": { body: LLMS_TXT, type: "text/markdown; charset=utf-8" },
   "/llms-full.txt": { body: LLMS_FULL_TXT, type: "text/markdown; charset=utf-8" },
   "/robots.txt": { body: ROBOTS_TXT, type: "text/plain; charset=utf-8" },

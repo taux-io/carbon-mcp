@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { FACTORS, SOURCES } from "../src/data/reviewed";
+import { DISCLAIMER } from "../src/engine";
 import {
-  API_DOCS_HTML, COPY_SCRIPT_HASH, LLMS_FULL_TXT, LLMS_TXT, renderPage, ROBOTS_TXT, SITEMAP_XML, TOOLS_HTML, type Locale,
+  API_DOCS_HTML, COPY_SCRIPT_HASH, LLMS_FULL_TXT, LLMS_TXT, PRIVACY_HTML, renderPage, ROBOTS_TXT, SITEMAP_XML, TERMS_HTML, TOOLS_HTML, type Locale,
 } from "../src/site";
 import { TOOLS } from "../src/tools";
 
@@ -50,8 +51,8 @@ describe("homepage", () => {
   it("keeps the sitemap free of XHTML-namespace elements so browsers show it as XML", () => {
     expect(SITEMAP_XML).not.toContain("xhtml");
     expect(SITEMAP_XML).toMatch(/^<\?xml version="1\.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
-    for (const path of ["/", "/en", "/ja", "/privacy", "/tools", "/api/docs"]) expect(SITEMAP_XML).toContain(`<loc>https://carbon.taux.io${path}</loc>`);
-    expect((SITEMAP_XML.match(/<url>/g) ?? []).length).toBe(6);
+    for (const path of ["/", "/en", "/ja", "/privacy", "/terms", "/tools", "/api/docs"]) expect(SITEMAP_XML).toContain(`<loc>https://carbon.taux.io${path}</loc>`);
+    expect((SITEMAP_XML.match(/<url>/g) ?? []).length).toBe(7);
   });
 
   it("carries the language alternates in every localized page head instead", () => {
@@ -63,6 +64,12 @@ describe("homepage", () => {
   it("links the privacy policy from every page and lists it in the sitemap", () => {
     for (const html of ALL_PAGES) expect(html).toContain('href="/privacy"');
     expect(SITEMAP_XML).toContain("<loc>https://carbon.taux.io/privacy</loc>");
+  });
+
+  it("links the terms of use from every page, and the terms carry the same disclaimer the tools return", () => {
+    for (const html of [...ALL_PAGES, PRIVACY_HTML, TERMS_HTML]) expect(html).toContain('href="/terms"');
+    expect(TERMS_HTML).toContain(DISCLAIMER);
+    expect(TERMS_HTML).toContain('<link rel="canonical" href="https://carbon.taux.io/terms">');
   });
 
   it("links the favicon and touch icon on every page", () => {

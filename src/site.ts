@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import { SOURCES } from "./data/reviewed";
+import { DISCLAIMER } from "./engine";
 import { ATTRIBUTION, METHODOLOGY_TOPICS, SERVICE_NAME, VERSION, MAX_BATCH, methodology } from "./service";
 import { TOOLS } from "./tools";
 import type { SourceStatus } from "./types";
@@ -898,7 +899,7 @@ ${copyable(c.ui, MCP_ENDPOINT, "endpoint")}
     .map((s) => `<section>\n${s}\n</section>`)
     .join("\n");
   const footer = `<p>${esc(c.disclaimer.paras[0] ?? "")}</p>
-<p><a href="/tools">${esc(c.disclaimer.links.tools)}</a> · <a href="/api/docs">${esc(c.disclaimer.links.api)}</a> · <a href="/llms.txt">llms.txt</a> · <a href="/llms-full.txt">llms-full.txt</a> · <a href="/privacy">${esc(PRIVACY_LABEL[me.lang] ?? "Privacy")}</a> · <a href="${REPO}">GitHub</a></p>`;
+<p><a href="/tools">${esc(c.disclaimer.links.tools)}</a> · <a href="/api/docs">${esc(c.disclaimer.links.api)}</a> · <a href="/llms.txt">llms.txt</a> · <a href="/llms-full.txt">llms-full.txt</a> · <a href="/privacy">${esc(PRIVACY_LABEL[me.lang] ?? "Privacy")}</a> · <a href="/terms">${esc(TERMS_LABEL[me.lang] ?? "Terms")}</a> · <a href="${REPO}">GitHub</a></p>`;
   return shell({
     lang: me.lang,
     title: c.title,
@@ -919,6 +920,7 @@ ${copyable(c.ui, MCP_ENDPOINT, "endpoint")}
 }
 
 const PRIVACY_LABEL: Record<string, string> = { "zh-Hant-TW": "隱私權政策", en: "Privacy", ja: "プライバシーポリシー" };
+const TERMS_LABEL: Record<string, string> = { "zh-Hant-TW": "服務條款", en: "Terms", ja: "利用規約" };
 
 function docShell(path: string, title: string, description: string, body: string): string {
   return shell({
@@ -932,7 +934,7 @@ function docShell(path: string, title: string, description: string, body: string
     brandHref: "/",
     skip: ZH.ui.skip,
     body: `<div class="wide doc">\n${body}\n</div>`,
-    footer: `<p>${esc(ZH.disclaimer.paras[0] ?? "")}</p><p><a href="/">首頁</a> · <a href="/llms-full.txt">llms-full.txt</a> · <a href="/privacy">隱私權政策</a> · <a href="${REPO}">GitHub</a></p>`,
+    footer: `<p>${esc(ZH.disclaimer.paras[0] ?? "")}</p><p><a href="/">首頁</a> · <a href="/llms-full.txt">llms-full.txt</a> · <a href="/privacy">隱私權政策</a> · <a href="/terms">服務條款</a> · <a href="${REPO}">GitHub</a></p>`,
   });
 }
 
@@ -1158,6 +1160,77 @@ export const PRIVACY_HTML: string = docShell(
 </div>`,
 );
 
+/**
+ * 服務條款（/terms）。送件 Claude Directory 時表單可能要求。
+ * 只寫服務實際的行為與網站上已公開的說法（免責聲明、資料授權、限流、版本保留）。
+ * 準據法、管轄法院與賠償上限是法律上的選擇，刻意沒有寫；要加由維護者決定。
+ */
+export const TERMS_UPDATED = "2026-11-13";
+
+export const TERMS_HTML: string = docShell(
+  "/terms",
+  "服務條款｜台灣碳排係數 MCP",
+  `${SITE_NAME} 的服務條款：免費、非官方、唯讀；計算結果僅供參考，不構成碳盤查認證或查證；資料依政府資料開放授權條款利用。`,
+  `<h1>服務條款 <span lang="en">Terms of Use</span></h1>
+<p>最後更新：${TERMS_UPDATED}。本服務（${esc(SITE_NAME)}，網址 ${SITE_ORIGIN}）由 taux.io 開發維運。使用本服務的網站、MCP 端點或 REST API，即表示你同意以下條款。</p>
+
+<h2>服務內容</h2>
+<ul>
+<li>本服務整理台灣政府公開的溫室氣體排放係數，並依這些係數提供查詢與計算。</li>
+<li>本服務免費提供，不需要帳號。所有端點都是唯讀的，使用者無法寫入或修改任何資料。</li>
+<li>本服務是非官方服務，與任何政府機關沒有隸屬關係，也未經其背書。</li>
+</ul>
+
+<h2>計算結果與免責</h2>
+<ul>
+<li>${esc(DISCLAIMER)}</li>
+<li>計算結果取決於你提供的活動數據與參數，例如用電量、燃料的低位熱值、冷媒的逸散率與混合冷媒的成分比例。本服務不查證這些輸入。</li>
+<li>查不到官方係數時，本服務會回報查不到，不會估算或以相近的數值代替。</li>
+<li>本服務依現況提供，不保證不中斷、沒有錯誤，也不保證資料即時更新。正式使用前，請自行對照官方原始公告。</li>
+<li>依本服務結果所做的決定與其後果，由使用者自行判斷與負責。</li>
+</ul>
+
+<h2>資料與授權</h2>
+<ul>
+<li>排放係數來自經濟部能源署、環境部、台灣自來水公司、臺北自來水事業處等機關的公開資料，權利屬各提供機關。標示政府資料開放授權條款－第1版者，依該條款（<a href="https://data.gov.tw/license">https://data.gov.tw/license</a>）利用。</li>
+<li>每個係數與計算結果都附上官方來源網址。轉載或引用時，請一併標示資料來源。</li>
+<li>本服務的程式碼以 MIT 授權公開於 <a href="${REPO}">${REPO}</a>。</li>
+</ul>
+
+<h2>使用規範</h2>
+<ul>
+<li>本服務以來源 IP 限制請求頻率，超過時會暫時回應 HTTP 429。請在限制內使用，不要嘗試繞過。</li>
+<li>請勿以干擾服務運作的方式使用本服務，例如大量平行請求或攻擊性的探測。</li>
+</ul>
+
+<h2>變更與中止</h2>
+<ul>
+<li>本服務可能新增、修改或停止部分功能，也可能停止整個服務。對外行為的變更記在<a href="${REPO}/blob/main/CHANGELOG.md">變更紀錄</a>。</li>
+<li>官方更正係數時，舊版本會保留；在服務運作期間，指定係數版本仍可重現過去的計算。</li>
+<li>這份條款可能更新，以本頁為準，頁首標示最後更新日期。</li>
+</ul>
+
+<h2>隱私</h2>
+<p>本服務如何處理連線資料，見<a href="/privacy">隱私權政策</a>。</p>
+
+<h2>聯絡</h2>
+<p>對這份條款有疑問，或要回報問題，請到 <a href="${REPO}/issues">${REPO}/issues</a>。</p>
+
+<h2 lang="en">English summary</h2>
+<div lang="en">
+<ul>
+<li>This is a free, unofficial, read-only service run by taux.io. It is not affiliated with or endorsed by any government agency, and no account is needed.</li>
+<li>Results are for reference only. They are not a certified greenhouse gas inventory, third-party verification, or a guarantee of regulatory compliance. Check values and scope against the official sources before formal use.</li>
+<li>Results depend on the activity data and parameters you supply, which the service does not verify. When no official factor exists, the service says so and does not estimate.</li>
+<li>The service is provided as is, with no guarantee of availability, accuracy or timeliness. You are responsible for decisions you make with its results.</li>
+<li>Emission factors belong to the issuing agencies. Those marked with the Open Government Data License, version 1.0, are used under it (<a href="https://data.gov.tw/license">https://data.gov.tw/license</a>). Credit the source when you reuse them. The code is MIT licensed.</li>
+<li>Requests are rate limited by source IP. Stay within the limits, do not try to bypass them, and do not disrupt the service.</li>
+<li>Features may change and the service may stop. Superseded factor versions are kept, so pinned calculations stay reproducible while the service runs. These terms may be updated; the date at the top shows the latest version.</li>
+<li>Privacy: <a href="/privacy">/privacy</a>. Contact: <a href="${REPO}/issues">${REPO}/issues</a>.</li>
+</ul>
+</div>`,
+);
+
 export const LLMS_TXT = `# ${SITE_NAME} (Unofficial) / 台灣碳排係數與碳排計算 MCP（非官方）
 
 > ${EN.description}
@@ -1290,6 +1363,10 @@ ${LOCALE_KEYS.map(
   <url>
     <loc>${SITE_ORIGIN}/privacy</loc>
     <lastmod>${PRIVACY_UPDATED}</lastmod>
+  </url>
+  <url>
+    <loc>${SITE_ORIGIN}/terms</loc>
+    <lastmod>${TERMS_UPDATED}</lastmod>
   </url>
   <url>
     <loc>${SITE_ORIGIN}/tools</loc>
