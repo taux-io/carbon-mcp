@@ -199,7 +199,7 @@ get_methodology - Explain the methods, scope and data limits.
 
 ## 6. 三個示範問句
 
-三題分別展示查詢、計算、以及「缺資料時先問而不是猜」。預期結果是 2026-11-13 直接呼叫正式環境的工具得到的；Claude 實際的措辭會不同，但數字與行為應該一致。
+三題分別展示查詢、計算、以及「缺資料時先問而不是猜」。預期結果有兩次驗證：先以 REST API 直接呼叫，再透過 Claude 的 MCP 連接器實際呼叫工具（見本節最後的「連接器實測紀錄」）。Claude 實際的措辭會不同，但數字與行為應該一致。
 
 ### 示範一：查詢係數
 
@@ -259,6 +259,26 @@ Our office air conditioner uses R-32 refrigerant with a 20 kg charge. What are t
 
 這一題最能說明這個服務與「AI 憑記憶回答」的差別。
 
+### 連接器實測紀錄
+
+2026-11-13 由 Claude Code 透過 claude.ai 的「Taiwan Carbon Open Data」連接器呼叫正式環境（版本 0.2.2），共六次工具呼叫：
+
+| 示範 | 工具與參數 | 結果 |
+|---|---|---|
+| 一 | `get_electricity_factor`，`year: 2025` | 回三筆：產業盤查 0.466、表燈非營業與包燈 0.471、公用售電業 0.467。附說明「本服務不會代為選擇」，公告日期 2026-06-02，來源為能源署 |
+| 二 | `calculate_emissions`，產業盤查係數、12000 kWh、`year: 2025` | `emissions_kg: "5592"`，`emissions_t: "5.592"`，公式 `12000 kWh × 0.466 kgCO2e/kWh = 5592 kgCO2e`，係數版本 1 |
+| 三 | `search_emission_factors`，`query: "R-32"` | 剛好一筆：二氟甲烷（HFC-32），GWP 677 |
+| 三 | `calculate_emissions`，HFC-32、20 kg，**不給任何計算依據** | 工具錯誤 `missing_refrigerant_basis`。訊息要求說明數量是逸散量還是填充量，並附上官方八類設備的逸散率範圍 |
+| 三 | 同上，只說是填充量（`basis: "charge"`），**不給逸散率** | 工具錯誤 `invalid_leak_rate`。訊息說明官方只有範圍、沒有預設值 |
+| 三 | 同上，加上 `leak_rate_percent: 5` 與設備類型「住宅及商業建築空調」 | `emissions_kg: "677"`，公式 `填充量 20 kg × 年逸散率 5% × GWP 677 = 677 kgCO2e`，並註明 5% 在官方範圍 1% 至 10% 內 |
+
+示範三有兩種錯誤代碼，差別在缺的是什麼：
+
+- 完全沒說數量的依據：`missing_refrigerant_basis`。
+- 說了是填充量但沒給逸散率：`invalid_leak_rate`。
+
+兩種情況服務都不會算出數字，Claude 只能回頭問使用者。
+
 ## 7. 送件前的檢查
 
 送件當天重新確認：
@@ -280,4 +300,4 @@ curl -s https://carbon.taux.io/health            # 版本與 database: ok
 - **公司或法人資訊。** 文件裡只寫了由 taux.io 開發維運。
 - **服務條款頁面。** 目前只有隱私權政策，以及首頁與每個工具回應裡的免責聲明。
 
-另外三個示範問句是直接呼叫工具驗證的，沒有在 Claude 的對話介面實際問過。送件前建議親自問一遍，確認 Claude 的行為符合上面的預期，尤其是示範三會不會先問逸散率。
+三個示範問句已透過 MCP 連接器實際呼叫過工具，結果在第 6 節的「連接器實測紀錄」。那次測試驗證的是連接器與工具的行為。它沒有驗證的是：一個全新的 Claude 對話收到自然語言的問句時，會不會自己選對工具、會不會在示範三先問逸散率而不是自行假設一個值。執行測試的 AI 事先知道預期的流程，所以這一點仍要由人在 Claude 的對話介面親自問一遍才能確認。
