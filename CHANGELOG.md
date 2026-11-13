@@ -2,6 +2,12 @@
 
 對外行為有變的才記在這裡：MCP 工具、REST 路由、收錄的係數、計算規則。
 
+## 0.2.5（2026-11-13）
+
+修正
+
+- 含氟氣體 46 筆係數的使用限制，與 `search_emission_factors` 的工具說明，原本只說混合冷媒可用 `calculate_emissions` 計算。0.2.4 起 `calculate_batch`、`compare_emissions` 與 `build_inventory` 也接受 `refrigerant_blend`，現在說明列出全部四個工具。**這 46 筆係數因此從版本 2 變成版本 3**；GWP 數值沒有變，指定 `factor_version: 1` 或 `2` 的計算仍可重現。
+
 ## 0.2.4（2026-11-13）
 
 新增
