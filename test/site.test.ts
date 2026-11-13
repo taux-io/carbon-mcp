@@ -70,6 +70,8 @@ describe("homepage", () => {
     for (const html of [...ALL_PAGES, PRIVACY_HTML, TERMS_HTML]) expect(html).toContain('href="/terms"');
     expect(TERMS_HTML).toContain(DISCLAIMER);
     expect(TERMS_HTML).toContain('<link rel="canonical" href="https://carbon.taux.io/terms">');
+    expect(TERMS_HTML).toContain("以中華民國法律為準據法");
+    expect(TERMS_HTML).toContain("臺灣臺北地方法院為第一審管轄法院");
   });
 
   it("links the favicon and touch icon on every page", () => {
