@@ -20,6 +20,7 @@ npm run dev                                # wrangler dev --test-scheduled
 npm run seed:local                         # 觸發一次排程，把已審核資料寫進本機 D1（dev 要先跑著）
 npm run smoke                              # 對跑著的服務做端到端檢查（可帶 base URL）
 npm run check-concepts                     # 檢查用詞對照表的每個字在跑著的服務上都找得到係數
+npm run check-rate-limit                   # 確認正式環境的限流有在運作（用單一連線；會讓你的 IP 被限流約一分鐘）
 ```
 
 需要 Node 24 以上：測試用內建的 `node:sqlite` 當 D1 的替身（`test/d1.ts`），直接套用 `migrations/` 的 SQL。它是替身不是 D1，動到 SQL 的修改還要用 `npm run dev` + `npm run smoke` 在本機 D1 上跑一次。
@@ -31,7 +32,7 @@ npm run check-concepts                     # 檢查用詞對照表的每個字�
 分層由外到內：
 
 - `src/server.ts`、`src/api.ts`：傳輸層。MCP 註冊、REST 路由、body 上限、批次拒絕、限流、CORS。不放商業邏輯。
-- `src/tools.ts`：11 個 MCP 工具的定義表（名稱、說明、zod 參數）。MCP 註冊、REST 的參數驗證、網站的工具說明與 `llms.txt` 都從這一份產生。
+- `src/tools.ts`：13 個 MCP 工具的定義表（名稱、說明、zod 參數）。MCP 註冊、REST 的參數驗證、網站的工具說明與 `llms.txt` 都從這一份產生。
 - `src/service.ts`：MCP 與 REST 共用的唯一一套查詢與計算流程。新功能加在這裡，再由 `tools.ts` 與 `api.ts` 各接一個薄殼。
 - `src/match.ts`、`src/concepts.ts`：科目對照。`concepts.ts` 是本服務整理的用詞對照表（「塑膠原料」→ 名稱含「聚丙烯」…的係數），`match.ts` 用它找候選、檢查單位、列出待確認事項。它只找候選，不選定係數。改對照表後用 `npm run check-concepts -- <baseUrl>` 確認每個字在真實資料裡都找得到係數。
 - `src/inventory.ts`：盤查清冊彙整。把多筆計算結果依範疇一、二、三分類並小計。`SCOPE_OF` 是係數類型對範疇的預設分類表；小計與合計在會誤導時扣住並說明原因（規則寫在檔案開頭）。
@@ -81,6 +82,10 @@ npm run check-concepts                     # 檢查用詞對照表的每個字�
 ## 正式環境的每日檢查
 
 `.github/workflows/production-check.yml` 每天對正式環境跑 `check-concepts` 與 `smoke`，失敗時開標籤為 `production-check` 的 issue，恢復後自動關閉。改 `src/concepts.ts` 或 `scripts/smoke.mjs`（例如工具數量改變）後，部署完用 `gh workflow run production-check.yml` 跑一次確認。細節見 `docs/deployment.md`。
+
+## 發版
+
+版本號在 `package.json`，`/health` 與 MCP 的 serverInfo 會回報它。對外行為有變（新增或修改工具、係數資料、計算規則）就升版並在 `CHANGELOG.md` 加一節。新增工具時同時改 `scripts/smoke.mjs` 的工具數，否則每日檢查會開 issue。
 
 ## 尚未完成
 

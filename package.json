@@ -1,6 +1,6 @@
 {
   "name": "carbon-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Taiwan Carbon Open Data (Unofficial): remote MCP server for Taiwan government emission factors and traceable emission calculations, on Cloudflare Workers. Not affiliated with any government agency.",
   "license": "MIT",
   "type": "module",
@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "seed:local": "curl -s \"http://127.0.0.1:8787/__scheduled?cron=30+19+*+*+*\"",
-    "check-concepts": "node scripts/check-concepts.mjs"
+    "check-concepts": "node scripts/check-concepts.mjs",
+    "check-rate-limit": "node scripts/check-rate-limit.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",

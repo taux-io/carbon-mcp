@@ -70,6 +70,8 @@ interface Copy {
   title: string;
   description: string;
   h1: string;
+  /** 標題裡不可被換行拆開的詞（中日文任何兩字之間都能斷行，「台灣」會被拆成兩行）。 */
+  h1Keep: string[];
   subtitle: string;
   badges: Tup<string, 4>;
   ui: {
@@ -115,6 +117,7 @@ const ZH: Copy = {
   description:
     "非官方、免費、公開唯讀的 MCP 服務，讓 AI 查詢台灣政府公開的碳排放係數（電力、自來水、燃料燃燒），計算排放量，並附上資料來源、適用年度與計算依據。",
   h1: "讓 AI 查得到台灣官方碳排係數",
+  h1Keep: ["查得到", "台灣", "官方", "碳排係數"],
   subtitle: "透過免費、公開的 MCP 服務，讓 AI 直接查詢台灣政府公開的碳排放係數，計算排放量，並附上資料來源、適用年度與計算依據。",
   badges: ["非官方", "免費", "公開唯讀", "不需註冊"],
   ui: {
@@ -246,6 +249,7 @@ const EN: Copy = {
   description:
     "A free, public, read-only MCP service that lets AI look up Taiwan government emission factors (electricity, tap water, fuel combustion) and calculate emissions with the source, applicable year and method shown.",
   h1: "Let AI look up Taiwan's official emission factors",
+  h1Keep: [],
   subtitle:
     "A free, public MCP service that lets AI query the emission factors published by Taiwan's government, calculate emissions, and show the source, applicable year and calculation basis.",
   badges: ["Unofficial", "Free", "Public, read-only", "No sign-up"],
@@ -379,6 +383,7 @@ const JA: Copy = {
   description:
     "台湾政府が公開する排出係数（電力・水道水・燃料の燃焼）をAIが検索し、出典・適用年度・計算根拠つきで排出量を計算できる、無料・公開・読み取り専用のMCPサービスです。",
   h1: "AIが台湾の公式排出係数を調べられるように",
+  h1Keep: ["台湾", "公式", "排出係数", "調べられる"],
   subtitle:
     "無料で公開されているMCPサービスを通じて、AIが台湾政府の公開する排出係数を直接検索し、排出量を計算します。出典、適用年度、計算の根拠を必ず添えます。",
   badges: ["非公式", "無料", "公開・読み取り専用", "登録不要"],
@@ -590,7 +595,8 @@ details>p,details>div{margin:0 0 1rem;color:var(--muted)}
 footer{border-top:1px solid var(--line);padding:1.5rem 0 3rem;color:var(--muted);font-size:.9rem}
 footer p{margin:.4rem 0}
 .attr{font-size:.88rem}
-.doc h1{font-size:clamp(1.7rem,4vw,2.3rem)}
+.doc h1{font-size:clamp(1.7rem,4vw,2.3rem);margin-top:2.5rem}
+.nb{white-space:nowrap}
 .doc h2{margin-top:2.5rem}
 .doc h2::before{content:none}
 .doc section>h2::before{content:none}
@@ -640,6 +646,13 @@ interface ShellOpts {
   skip: string;
   body: string;
   footer: string;
+}
+
+/** 把指定的詞包成不換行的片段，其餘照常跳脫。 */
+function keepTogether(text: string, words: string[]): string {
+  if (words.length === 0) return esc(text);
+  const pattern = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "g");
+  return text.split(pattern).map((part) => (words.includes(part) ? `<span class="nb">${esc(part)}</span>` : esc(part))).join("");
 }
 
 function shell(o: ShellOpts): string {
@@ -865,7 +878,7 @@ export function renderPage(locale: Locale): string {
   const canonical = `${SITE_ORIGIN}${me.path}`;
   const nav = `<nav class="nav" aria-label="${esc(c.ui.navLabel)}"><a href="#install">${esc(c.headings[3])}</a><a href="#tools">${esc(c.headings[5])}</a><a href="#faq">${esc(c.headings[8])}</a></nav>`;
   const hero = `<div class="hero"><div class="wide">
-<h1>${esc(c.h1)}</h1>
+<h1>${keepTogether(c.h1, c.h1Keep)}</h1>
 <p class="lede">${esc(c.subtitle)}</p>
 <ul class="badges">${c.badges.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
 <p class="endpoint-label">${esc(c.ui.endpointLabel)}</p>
