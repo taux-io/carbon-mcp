@@ -91,7 +91,7 @@ function questionsFor(candidates: StoredFactor[], fits: UnitFit[], yearGiven: bo
     q.push("燃料用在固定設備（鍋爐、發電機）還是車輛？固定燃燒與移動燃燒的係數不同。");
   }
   if (types.has("fugitive_emission")) {
-    q.push("用的是哪一種冷媒？數量是實際逸散（補充）量還是設備填充量？以填充量計算需要年逸散率，官方只提供各類設備的範圍。混合冷媒（如 R-410A）不在官方表內，需依成分拆開計算。");
+    q.push("用的是哪一種冷媒？數量是實際逸散（補充）量還是設備填充量？以填充量計算需要年逸散率，官方只提供各類設備的範圍。混合冷媒（如 R-410A）不在官方表內，要用 calculate_emissions 的 refrigerant_blend 計算，成分比例需由使用者提供，本服務沒有內建。");
   }
   if (fits.includes("needs_heating_value")) q.push("燃料的低位熱值是多少？官方沒有預設值，需自行檢測或向供應商取得。");
   if (types.has("product_carbon_footprint") && types.size > 1) {

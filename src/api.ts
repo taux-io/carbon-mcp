@@ -5,11 +5,11 @@
 import { z } from "zod";
 
 import {
-  calculateBatch, calculateOne, electricity, factorDetail, factorVersions, listDataSources, search, updateStatus,
+  calculateAny, calculateBatch, electricity, factorDetail, factorVersions, listDataSources, search, updateStatus,
 } from "./service";
 import { buildInventory } from "./inventory";
 import { matchActivity } from "./match";
-import { batchShape, calcSchema, electricityShape, inventoryShape, matchShape, searchShape, toInventoryItem } from "./tools";
+import { batchShape, calcOrBlendSchema, calcSchema, electricityShape, inventoryShape, matchShape, searchShape, toAnyRequest, toInventoryItem } from "./tools";
 
 /** 瀏覽器端的跨來源呼叫只開給自己的網站與本機開發；伺服器對伺服器的呼叫不受 CORS 影響。 */
 const ALLOWED_ORIGINS = new Set(["https://carbon.taux.io", "http://localhost:8787", "http://127.0.0.1:8787"]);
@@ -35,6 +35,7 @@ const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
   invalid_request: 400,
   invalid_quantity: 400,
+  invalid_composition: 400,
   method_not_allowed: 405,
   payload_too_large: 413,
   data_not_loaded: 503,
@@ -137,8 +138,8 @@ async function route(request: Request, url: URL, db: D1Database, now: Date): Pro
   if (path === "/api/v1/calculate" && post) {
     const body = await jsonBody(request);
     if (isFailure(body)) return body;
-    const p = parse(calcSchema, body);
-    return isFailure(p) ? p : calculateOne(db, toRequest(p), now);
+    const p = parse(calcOrBlendSchema, body);
+    return isFailure(p) ? p : calculateAny(db, toAnyRequest(p), now);
   }
 
   if (path === "/api/v1/calculate/batch" && post) {

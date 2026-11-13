@@ -114,7 +114,7 @@ const fail = (code: CalcErrorCode, message: string, details?: Record<string, unk
 const DECIMAL = /^\d+(\.\d+)?$/;
 
 /** 把輸入解析成非負的精確十進位。數字先轉成字串（JS 對 0.1 這類值的最短表示是穩定的）。 */
-function parseDecimal(input: string | number | undefined): Big | null {
+export function parseDecimal(input: string | number | undefined): Big | null {
   if (input === undefined) return null;
   const text = typeof input === "number" ? (Number.isFinite(input) ? String(input) : "") : input.trim().replace(/,/g, "");
   if (!DECIMAL.test(text)) return null;

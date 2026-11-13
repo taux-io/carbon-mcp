@@ -96,6 +96,34 @@ describe("refrigerant leakage in the inventory", () => {
   });
 });
 
+describe("refrigerant blends in the inventory", () => {
+  const R410A: InventoryItem = {
+    label: "會議室冷氣 R-410A",
+    blend: [{ factor_id: "moenv-gwp-2024-hfc-32", mass_percent: 50 }, { factor_id: "moenv-gwp-2024-hfc-125", mass_percent: 50 }],
+    quantity: 10, quantity_unit: "kg",
+    context: { refrigerant: { basis: "leaked_amount" } },
+  };
+
+  it("expands a blend into one traceable line per component", async () => {
+    const inv = await build([R410A]);
+    const lines = scopeOf(inv, 1).items;
+    expect(lines.map((l) => [l.factor_id, l.emissions_kg])).toEqual([["moenv-gwp-2024-hfc-32", "3385"], ["moenv-gwp-2024-hfc-125", "15850"]]);
+    expect(lines[0].label).toContain("會議室冷氣 R-410A");
+    expect(lines[0].label).toContain("50%");
+    expect(scopeOf(inv, 1).subtotal.emissions_kg).toBe("19235");
+    expect(scopeOf(inv, 1).by_gas_kg_co2e).toEqual({ HFCs: "19235" });
+    expect(inv.completeness).toEqual({ items: 1, calculated: 1, failed: 0 });
+  });
+
+  it("counts a blend whose percentages do not add to 100 as one failed Scope 1 item", async () => {
+    const bad = { ...R410A, blend: [{ factor_id: "moenv-gwp-2024-hfc-32", mass_percent: 50 }, { factor_id: "moenv-gwp-2024-hfc-125", mass_percent: 40 }] };
+    const inv = await build([ELECTRICITY, bad]);
+    expect(inv.failed_items).toMatchObject([{ index: 1, scope: 1, error: { code: "invalid_composition" } }]);
+    expect(scopeOf(inv, 1).subtotal.available).toBe(false);
+    expect(inv.completeness).toEqual({ items: 2, calculated: 1, failed: 1 });
+  });
+});
+
 describe("totals that would mislead are withheld", () => {
   it("does not add CO2 to CO2e: the all-scope total is withheld, Scope 1+2 still stands", async () => {
     const inv = await build([ELECTRICITY, WATER_TWC]);

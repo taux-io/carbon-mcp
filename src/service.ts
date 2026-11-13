@@ -2,9 +2,11 @@
  * 服務層：MCP 工具與 REST API 共用的唯一一套查詢與計算邏輯。
  * 每個函式拿 D1 與參數，回傳可直接序列化的物件；失敗回 { ok: false, error }。
  */
+import Big from "big.js";
+
 import pkg from "../package.json";
 import {
-  calculate, compare, DISCLAIMER, totalOf, type CalcError, type CalcInput, type CalcResult,
+  calculate, compare, DISCLAIMER, parseDecimal, totalOf, type CalcError, type CalcInput, type CalcResult,
 } from "./engine";
 import {
   availableYears, documentsFor, electricityFactors, getFactor, getFactorVersion, latestJobs, listSources,
@@ -214,6 +216,101 @@ export async function calculateOne(db: D1Database, req: CalcRequest, now: Date):
   return calculate(factor, req, now, years);
 }
 
+export interface BlendComponent {
+  /** 成分的係數 ID，必須是公告附表四的含氟氣體。 */
+  factor_id: string;
+  /** 質量百分比。所有成分合計必須剛好是 100。 */
+  mass_percent: string | number;
+}
+
+export type BlendRequest = Omit<CalcRequest, "factor_id" | "factor_version"> & { components: BlendComponent[] };
+
+export const MAX_BLEND_COMPONENTS = 6;
+
+/**
+ * 混合冷媒：依使用者提供的成分比例，把數量拆給各成分，逐一用該成分的官方 GWP 計算。
+ * 本服務不內建任何冷媒的成分比例，比例完全來自使用者；合計不是 100 就拒絕，不補足也不調整。
+ * 每個成分都走單一冷媒的計算路徑，所以每一筆都追溯得到官方係數與版本。
+ */
+export async function computeBlend(db: D1Database, req: BlendRequest, now: Date): Promise<{ ok: true; parts: { mass_percent: string; result: CalcResult }[] } | Failure> {
+  const parts = req.components.map((c) => ({ id: c.factor_id, pct: parseDecimal(c.mass_percent) }));
+  if (parts.length < 2 || parts.length > MAX_BLEND_COMPONENTS) {
+    return fail("invalid_composition", `混合冷媒需要 2 到 ${MAX_BLEND_COMPONENTS} 個成分。單一冷媒請直接用 factor_id 計算。`);
+  }
+  if (parts.some((p) => !p.pct || p.pct.lte(0))) return fail("invalid_composition", "每個成分的質量百分比必須是大於 0 的數字。");
+  if (new Set(parts.map((p) => p.id)).size !== parts.length) return fail("invalid_composition", "成分重複：同一個係數 ID 出現不只一次。");
+  const sum = parts.reduce((s, p) => s.plus(p.pct!), new Big(0));
+  if (!sum.eq(100)) {
+    return fail("invalid_composition", `成分的質量百分比合計必須剛好是 100，目前是 ${sum.toFixed()}。本服務不會自行補足或調整比例，請確認成分後再試。`, { sum_percent: sum.toFixed() });
+  }
+  const quantity = parseDecimal(req.quantity);
+  if (!quantity) return fail("invalid_quantity", "活動數據必須是不小於零的十進位數字。");
+
+  const out: { mass_percent: string; result: CalcResult }[] = [];
+  for (const p of parts) {
+    const factor = await getFactor(db, p.id);
+    if (!factor) return (await notLoaded(db)) ?? fail("factor_not_found", `${NOT_FOUND_MESSAGE}找不到成分的係數 ${p.id}。`, { factor_id: p.id });
+    if (factor.factor_type !== "fugitive_emission") {
+      return fail("invalid_composition", `成分必須是環境部公告附表四的含氟氣體；${p.id} 不是。表內沒有的成分（例如 R-22、碳氫冷媒）本服務無法計算。`, { factor_id: p.id });
+    }
+    const result = calculate(factor, { ...req, quantity: quantity.times(p.pct!).times("0.01").toFixed() }, now);
+    if (!result.ok) return result;
+    out.push({ mass_percent: p.pct!.toFixed(), result });
+  }
+  return { ok: true, parts: out };
+}
+
+export async function calculateBlend(db: D1Database, req: BlendRequest, now: Date) {
+  const blend = await computeBlend(db, req, now);
+  if (!blend.ok) return blend;
+  const kg = blend.parts.reduce((s, p) => s.plus(p.result.emissions_kg), new Big(0));
+  const weightedGwp = blend.parts.reduce((s, p) => s.plus(new Big(p.mass_percent).times(p.result.factor.value!).times("0.01")), new Big(0));
+  const first = blend.parts[0].result;
+  return {
+    ok: true as const,
+    kind: "refrigerant_blend" as const,
+    activity: { quantity: parseDecimal(req.quantity)!.toFixed(), unit: first.activity.unit },
+    composition: blend.parts.map((p) => ({
+      factor_id: p.result.factor.id,
+      factor_version: p.result.factor.version,
+      name: p.result.factor.name,
+      mass_percent: p.mass_percent,
+      gwp: p.result.factor.value,
+      leaked_kg: p.result.activity.converted_quantity,
+      emissions_kg: p.result.emissions_kg,
+      source_url: p.result.factor.source_url,
+    })),
+    weighted_gwp: weightedGwp.toFixed(),
+    weighted_gwp_note: "依使用者提供的成分比例與官方附表四的 GWP 計算而得，不是官方公布的數值。",
+    formula: `${blend.parts.map((p) => `${p.result.activity.converted_quantity} kg × ${p.result.factor.value}`).join(" + ")} = ${kg.toFixed()} kgCO2e`,
+    emissions_kg: kg.toFixed(),
+    emissions_t: kg.times("0.001").toFixed(),
+    emissions_gas_basis: "CO2e",
+    user_supplied: {
+      composition: {
+        components: blend.parts.map((p) => ({ factor_id: p.result.factor.id, mass_percent: p.mass_percent })),
+        note: "成分比例由使用者提供，本服務沒有內建任何冷媒的成分，也沒有查證這個比例；結果的正確性取決於它。",
+      },
+      ...first.user_supplied,
+    },
+    calculated_at: now.toISOString(),
+    limitations: [
+      "計算假設逸散的成分比例與填充時相同。",
+      ...first.limitations.filter((l) => !l.includes("混合冷媒")),
+    ],
+    attribution: ATTRIBUTION,
+    disclaimer: DISCLAIMER,
+  };
+}
+
+/** calculate_emissions 的入口：單一係數或混合冷媒，兩者擇一。 */
+export async function calculateAny(db: D1Database, req: Partial<CalcRequest> & Omit<CalcRequest, "factor_id"> & { blend?: BlendComponent[] }, now: Date) {
+  if (req.factor_id && req.blend) return fail("invalid_request", "factor_id 與 refrigerant_blend 只能給一個。");
+  if (req.blend) return calculateBlend(db, { ...req, components: req.blend }, now);
+  if (!req.factor_id) return fail("invalid_request", "請提供 factor_id；混合冷媒則提供 refrigerant_blend。");
+  return calculateOne(db, { ...req, factor_id: req.factor_id }, now);
+}
+
 export const MAX_BATCH = 50;
 
 export async function calculateBatch(db: D1Database, items: CalcRequest[], now: Date) {
@@ -308,7 +405,8 @@ const METHODOLOGY = {
       "公式：排放量 = 逸散量 × 溫暖化潛勢。以設備填充量估算時，逸散量 = 填充量 × 年逸散率。",
       "官方附表三只提供各類設備逸散率的範圍（例如住宅及商業建築空調每年 1% 至 10%），沒有單一預設值。年逸散率必須由使用者提供，本服務只會指出它是否落在官方範圍內。",
       "計算時必須說明數量是實際逸散（補充）量還是設備填充量；本服務不會假設，因為把填充量當成逸散量會嚴重高估。",
-      "附表四只列純物質。R-410A、R-407C 等混合冷媒與 R-22 不在表內，本服務不提供其數值；混合冷媒需依成分比例拆成各成分分別計算。",
+      "附表四只列純物質。混合冷媒（R-410A、R-407C 等）可用 refrigerant_blend 計算：由使用者提供各成分的質量百分比，本服務依附表四逐成分計算並加總。本服務沒有內建任何冷媒的成分比例，也不查證使用者給的比例。",
+      "R-22 與碳氫冷媒不在附表四內，無法計算。",
     ],
   },
   product_footprint: {

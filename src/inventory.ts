@@ -10,7 +10,7 @@
 import Big from "big.js";
 
 import { DISCLAIMER, type CalcResult } from "./engine";
-import { ATTRIBUTION, calculateOne, MAX_BATCH, type CalcRequest, type Failure } from "./service";
+import { ATTRIBUTION, calculateOne, computeBlend, fail, MAX_BATCH, type BlendComponent, type CalcRequest, type Failure } from "./service";
 import { getFactor } from "./store";
 import type { FactorType } from "./types";
 
@@ -35,7 +35,11 @@ const SCOPE_INFO: Record<Scope, { name: string; iso_14064_1: string; description
   3: { name: "範疇三", iso_14064_1: "類別3至6", description: "其他間接排放：上下游的運輸、採購的商品與服務（含自來水）等。" },
 };
 
-export interface InventoryItem extends CalcRequest {
+export interface InventoryItem extends Omit<CalcRequest, "factor_id"> {
+  /** 單一係數。與 blend 擇一。 */
+  factor_id?: string;
+  /** 混合冷媒的成分。清冊中會展開成每個成分一行。 */
+  blend?: BlendComponent[];
   /** 這筆活動的名稱，例如「總公司電費」。只用來讓清冊好讀。 */
   label?: string;
   /** 覆寫預設的範疇分類。 */
@@ -90,7 +94,30 @@ interface Entry {
 export async function buildInventory(db: D1Database, items: InventoryItem[], inventoryYear: number | undefined, now: Date) {
   const entries: Entry[] = [];
   for (const [index, item] of items.slice(0, MAX_BATCH).entries()) {
-    const result = await calculateOne(db, { ...item, year: item.year ?? inventoryYear }, now);
+    const year = item.year ?? inventoryYear;
+    const by = item.scope ? ("user" as const) : ("default" as const);
+    if (item.blend && item.factor_id) {
+      entries.push({ index, item, result: fail("invalid_request", "factor_id 與 refrigerant_blend 只能給一個。"), scope: item.scope ?? null, classifiedBy: null });
+      continue;
+    }
+    if (item.blend) {
+      const scope = item.scope ?? SCOPE_OF.fugitive_emission;
+      const blend = await computeBlend(db, { ...item, year, components: item.blend }, now);
+      if (!blend.ok) {
+        entries.push({ index, item, result: blend, scope, classifiedBy: by });
+        continue;
+      }
+      for (const part of blend.parts) {
+        const label = `${item.label ?? "混合冷媒"}（成分 ${part.result.factor.name}，${part.mass_percent}%）`;
+        entries.push({ index, item: { ...item, label }, result: part.result, scope, classifiedBy: by });
+      }
+      continue;
+    }
+    if (!item.factor_id) {
+      entries.push({ index, item, result: fail("invalid_request", "請提供 factor_id；混合冷媒則提供 refrigerant_blend。"), scope: item.scope ?? null, classifiedBy: null });
+      continue;
+    }
+    const result = await calculateOne(db, { ...item, factor_id: item.factor_id, year }, now);
     // 算不出來的項目也要知道它屬於哪個範疇，才能只扣住那個範疇的小計。
     const factorType = result.ok ? (result.factor.factor_type as FactorType) : (await getFactor(db, item.factor_id))?.factor_type;
     const scope = item.scope ?? (factorType ? SCOPE_OF[factorType] : null);
@@ -168,11 +195,15 @@ export async function buildInventory(db: D1Database, items: InventoryItem[], inv
     failed_items: failed.map((e) => ({
       index: e.index,
       label: e.item.label ?? null,
-      factor_id: e.item.factor_id,
+      factor_id: e.item.factor_id ?? null,
       scope: e.scope,
       error: (e.result as Failure).error,
     })),
-    completeness: { items: entries.length, calculated: entries.length - failed.length, failed: failed.length },
+    completeness: (() => {
+      const total = Math.min(items.length, MAX_BATCH);
+      const failedItems = new Set(failed.map((e) => e.index)).size;
+      return { items: total, calculated: total - failedItems, failed: failedItems };
+    })(),
     classification_note:
       "範疇分類是本服務依係數類型做的預設（燃燒為範疇一、外購電力為範疇二、自來水與產品碳足跡為範疇三），不是官方對個別項目的認定。實際歸屬取決於組織邊界，可用每筆項目的 scope 覆寫。這份彙整只涵蓋你提供的活動，不代表盤查的完整性（例如製程排放、廢水與化糞池的排放本服務無法計算）。生質燃料的 CO2 依官方指引單獨表列於各項目的 biogenic_co2_kg，未計入小計。",
     warnings,

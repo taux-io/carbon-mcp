@@ -175,6 +175,76 @@ describe.each<Era>(["legacy", "modern"])("MCP (%s protocol)", (era) => {
   });
 });
 
+describe("refrigerant blends", () => {
+  const call = async (args: Record<string, unknown>) => {
+    const res = await send(mcpRequest("legacy", "tools/call", { name: "calculate_emissions", arguments: args }));
+    const payload = await readPayload(res);
+    return { isError: payload.result.isError === true, data: JSON.parse(payload.result.content[0].text) };
+  };
+  const leaked = { optional_context: { refrigerant: { basis: "leaked_amount" } } };
+  const blend = (...parts: [string, number | string][]) => ({ refrigerant_blend: { components: parts.map(([id, mass_percent]) => ({ factor_id: `moenv-gwp-2024-${id}`, mass_percent })) } });
+
+  it("calculates each component with its official GWP and sums them", async () => {
+    const { data } = await call({ ...blend(["hfc-32", 50], ["hfc-125", 50]), quantity: 10, quantity_unit: "kg", ...leaked });
+    expect(data.emissions_kg).toBe("19235");
+    expect(data.weighted_gwp).toBe("1923.5");
+    expect(data.composition.map((c: { name: string; gwp: string; emissions_kg: string }) => [c.gwp, c.emissions_kg])).toEqual([["677", "3385"], ["3170", "15850"]]);
+    expect(data.composition.every((c: { factor_version: number; source_url: string }) => c.factor_version === 1 && c.source_url.startsWith("https://"))).toBe(true);
+    expect(data.user_supplied.composition.note).toContain("沒有內建");
+    expect(data.weighted_gwp_note).toContain("不是官方公布的數值");
+  });
+
+  it("applies the leak rate to a charge and handles three components with decimals", async () => {
+    const { data } = await call({
+      ...blend(["hfc-32", 23], ["hfc-125", 25], ["hfc-134a", 52]), quantity: 100, quantity_unit: "kg",
+      optional_context: { refrigerant: { basis: "charge", leak_rate_percent: "2.5", equipment_type: "chiller" } },
+    });
+    expect(data.weighted_gwp).toBe("1624.21");
+    expect(data.emissions_kg).toBe("4060.525");
+  });
+
+  it.each([
+    ["percentages below 100", blend(["hfc-32", 50], ["hfc-125", 40])],
+    ["percentages above 100", blend(["hfc-32", 60], ["hfc-125", 50])],
+    ["a repeated component", blend(["hfc-32", 50], ["hfc-32", 50])],
+    ["a zero share", blend(["hfc-32", 100], ["hfc-125", 0])],
+  ])("refuses %s instead of adjusting the composition", async (_name, b) => {
+    const { isError, data } = await call({ ...b, quantity: 10, quantity_unit: "kg", ...leaked });
+    expect([isError, data.error.code]).toEqual([true, "invalid_composition"]);
+  });
+
+  it("refuses a component that is not a listed fluorinated gas", async () => {
+    const { data } = await call({ refrigerant_blend: { components: [{ factor_id: "moenv-gwp-2024-hfc-32", mass_percent: 50 }, { factor_id: "tw-electricity-2024", mass_percent: 50 }] }, quantity: 10, quantity_unit: "kg", ...leaked });
+    expect(data.error.code).toBe("invalid_composition");
+    const unknown = await call({ refrigerant_blend: { components: [{ factor_id: "moenv-gwp-2024-hfc-32", mass_percent: 50 }, { factor_id: "r-22", mass_percent: 50 }] }, quantity: 10, quantity_unit: "kg", ...leaked });
+    expect(unknown.data.error.code).toBe("factor_not_found");
+  });
+
+  it("still requires the basis of the quantity", async () => {
+    const { data } = await call({ ...blend(["hfc-32", 50], ["hfc-125", 50]), quantity: 10, quantity_unit: "kg" });
+    expect(data.error.code).toBe("missing_refrigerant_basis");
+  });
+
+  it("requires exactly one of factor_id and refrigerant_blend", async () => {
+    const both = await call({ factor_id: "moenv-gwp-2024-hfc-32", ...blend(["hfc-32", 50], ["hfc-125", 50]), quantity: 1, quantity_unit: "kg", ...leaked });
+    expect(both.data.error.code).toBe("invalid_request");
+    const neither = await call({ quantity: 1, quantity_unit: "kg" });
+    expect(neither.data.error.code).toBe("invalid_request");
+  });
+
+  it("gives the same answer over REST", async () => {
+    const res = await post("/api/v1/calculate", { ...blend(["hfc-32", 50], ["hfc-125", 50]), quantity: 10, quantity_unit: "kg", ...leaked });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { emissions_kg: string }).emissions_kg).toBe("19235");
+    expect((await post("/api/v1/calculate", { ...blend(["hfc-32", 50], ["hfc-125", 40]), quantity: 10, quantity_unit: "kg", ...leaked })).status).toBe(400);
+  });
+
+  it("holds no built-in composition: a blend name alone finds nothing", async () => {
+    const res = await send(mcpRequest("legacy", "tools/call", { name: "search_emission_factors", arguments: { query: "R-410A" } }));
+    expect(JSON.parse((await readPayload(res)).result.content[0].text).total).toBe(0);
+  });
+});
+
 describe("MCP transport guards", () => {
   it("rejects JSON-RPC batches before they reach the SDK", async () => {
     const res = await post("/mcp", [{ jsonrpc: "2.0", id: 1, method: "tools/list" }]);

@@ -8,8 +8,8 @@
 import { z } from "zod";
 
 import {
-  calculateBatch, calculateOne, compareEmissions, electricity, factorDetail, factorVersions, listDataSources,
-  MAX_BATCH, methodology, METHODOLOGY_TOPICS, ping, search, updateStatus, USAGE_TYPES,
+  calculateAny, calculateBatch, compareEmissions, electricity, factorDetail, factorVersions, listDataSources,
+  MAX_BATCH, MAX_BLEND_COMPONENTS, methodology, METHODOLOGY_TOPICS, ping, search, updateStatus, USAGE_TYPES,
 } from "./service";
 import { REFRIGERATION_EQUIPMENT, type RefrigerationEquipment } from "./data/reviewed";
 import { buildInventory } from "./inventory";
@@ -54,6 +54,30 @@ export const calcShape = {
   factor_version: z.number().int().min(1).optional().describe("指定係數版本，用來重現過去的計算。不給就用目前版本。"),
 };
 export const calcSchema = z.object(calcShape);
+
+const blend = z
+  .object({
+    components: z
+      .array(
+        z.object({
+          factor_id: z.string().min(1).max(120).describe("成分的係數 ID（公告附表四的含氟氣體），來自 search_emission_factors，例如查 R-32、HFC-125。"),
+          mass_percent: z.union([z.number(), z.string()]).describe("這個成分的質量百分比，例如 50。"),
+        }),
+      )
+      .min(2)
+      .max(MAX_BLEND_COMPONENTS)
+      .describe("各成分與其質量百分比，合計必須剛好是 100。"),
+  })
+  .describe("混合冷媒（例如 R-410A）。成分比例必須來自使用者或設備、冷媒的規格文件；本服務沒有內建任何冷媒的成分，請勿憑記憶填寫，不確定時請向使用者確認。");
+
+/** calculate_emissions 與清冊項目：單一係數（factor_id）或混合冷媒（refrigerant_blend），兩者擇一。 */
+export const calcOrBlendShape = {
+  ...calcShape,
+  factor_id: calcShape.factor_id.optional(),
+  refrigerant_blend: blend.optional(),
+};
+export const calcOrBlendSchema = z.object(calcOrBlendShape);
+export const toAnyRequest = (a: z.infer<typeof calcOrBlendSchema>) => ({ ...toRequest({ ...a, factor_id: a.factor_id ?? "" }), factor_id: a.factor_id, blend: a.refrigerant_blend?.components });
 type CalcArgs = z.infer<typeof calcSchema>;
 
 const toRequest = (a: CalcArgs) => ({
@@ -94,7 +118,7 @@ export const batchShape = {
   items: z.array(calcSchema).min(1).max(MAX_BATCH).describe(`要計算的活動，最多 ${MAX_BATCH} 筆。`),
 };
 
-export const inventoryItemSchema = calcSchema.extend({
+export const inventoryItemSchema = calcOrBlendSchema.extend({
   label: z.string().max(80).optional().describe("這筆活動的名稱，例如「總公司電費」。只用來讓清冊好讀。"),
   scope: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional().describe("覆寫預設的範疇分類（1、2 或 3）。組織邊界使某筆活動不屬於預設範疇時使用。"),
 });
@@ -104,7 +128,7 @@ export const inventoryShape = {
   items: z.array(inventoryItemSchema).min(1).max(MAX_BATCH).describe(`要列入清冊的活動，最多 ${MAX_BATCH} 筆。`),
 };
 
-export const toInventoryItem = (a: z.infer<typeof inventoryItemSchema>) => ({ ...toRequest(a), label: a.label, scope: a.scope });
+export const toInventoryItem = (a: z.infer<typeof inventoryItemSchema>) => ({ ...toAnyRequest(a), label: a.label, scope: a.scope });
 
 export const compareShape = {
   baseline: calcSchema.describe("基準（例如去年）。"),
@@ -192,10 +216,10 @@ export const TOOLS: ToolDef[] = [
     name: "calculate_emissions",
     title: "Calculate emissions",
     description:
-      "Calculate emissions for one activity: activity data × an official factor from the database. Checks units, the applicable year and whether the factor may be used for calculation, and returns the formula, kg and tonnes, the factor version and the source URL. Returns a clear error instead of guessing when the unit is incompatible, the year does not match or required data is missing (fuel factors need a user-supplied lower heating value). 計算單一活動的排放量：活動數據 × 資料庫中的官方係數。會檢查單位、適用年度與係數是否可用於計算，回傳公式、公斤與公噸、係數版本與來源網址。單位不相容、年度不符或缺少必要資料時（燃料係數需要使用者提供低位熱值）回傳明確錯誤，不會猜測。",
+      "Calculate emissions for one activity: activity data × an official factor from the database. Checks units, the applicable year and whether the factor may be used for calculation, and returns the formula, kg and tonnes, the factor version and the source URL. Returns a clear error instead of guessing when the unit is incompatible, the year does not match or required data is missing (fuel factors need a user-supplied lower heating value; refrigerants need the basis of the quantity). A refrigerant blend such as R-410A can be calculated by passing refrigerant_blend with the user-supplied composition instead of factor_id. 計算單一活動的排放量：活動數據 × 資料庫中的官方係數。會檢查單位、適用年度與係數是否可用於計算，回傳公式、公斤與公噸、係數版本與來源網址。單位不相容、年度不符或缺少必要資料時（燃料係數需要使用者提供低位熱值，冷媒需要說明數量的依據）回傳明確錯誤，不會猜測。混合冷媒（如 R-410A）可不給 factor_id，改以 refrigerant_blend 提供使用者確認過的成分比例。",
     summary: { zh: "用官方係數計算單一活動的排放量。", en: "Calculate emissions for one activity with an official factor.", ja: "公式係数で1件の活動の排出量を計算します。" },
-    shape: calcShape,
-    run: (a, { db, now }) => calculateOne(db, toRequest(a), now),
+    shape: calcOrBlendShape,
+    run: (a, { db, now }) => calculateAny(db, toAnyRequest(a), now),
   }),
   def({
     name: "calculate_batch",
