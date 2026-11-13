@@ -82,7 +82,7 @@ npm run check-rate-limit                   # 確認正式環境的限流有在�
 
 ## 正式環境的每日檢查
 
-`.github/workflows/production-check.yml` 每天對正式環境跑 `check-concepts` 與 `smoke`，失敗時開標籤為 `production-check` 的 issue，恢復後自動關閉。改 `src/concepts.ts` 或 `scripts/smoke.mjs`（例如工具數量改變）後，部署完用 `gh workflow run production-check.yml` 跑一次確認。細節見 `docs/deployment.md`。
+`.github/workflows/production-check.yml` 每天對正式環境跑 `check-concepts` 與 `smoke`，並比對官方 MCP Registry 的條目（`check-registry`），失敗時開標籤為 `production-check` 的 issue，恢復後自動關閉。改 `src/concepts.ts` 或 `scripts/smoke.mjs`（例如工具數量改變）後，部署完用 `gh workflow run production-check.yml` 跑一次確認。細節見 `docs/deployment.md`。
 
 ## 發版
 

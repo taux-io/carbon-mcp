@@ -59,10 +59,11 @@ npm run smoke -- https://carbon.taux.io
 
 ## 每日檢查
 
-`.github/workflows/production-check.yml` 每天台灣時間 04:15（排在 03:30 的資料同步之後）對 `https://carbon.taux.io` 跑兩個檢查：
+`.github/workflows/production-check.yml` 每天台灣時間 04:15（排在 03:30 的資料同步之後）跑三個檢查，前兩個對 `https://carbon.taux.io`：
 
 - `npm run check-concepts`：用詞對照表（`src/concepts.ts`）的每個字在即時資料裡都還找得到係數。環境部改了係數名稱時，這裡會先發現。
 - `npm run smoke`：網頁、MCP 兩個協定版本、REST 計算與同步狀態。
+- `npm run check-registry`：官方 MCP Registry 上的條目，名稱與連線位址是否仍與 `server.json` 一致。不一致而又不是自己改的，視為條目被竄改。
 
 任一項失敗就開一個標籤為 `production-check` 的 issue，附上輸出與執行紀錄的連結；已經有未關閉的 issue 時改為留言，不重複開。之後檢查恢復正常會自動關閉那個 issue。
 
@@ -85,7 +86,7 @@ gh workflow run production-check.yml -f base_url=https://carbon.taux.io
 
 ### 發布到官方 MCP Registry
 
-`.github/workflows/publish-mcp.yml` 在推送 `v*` tag 時把 `server.json` 發布到 registry。**截至 2026-11-13 尚未發布過。**
+`.github/workflows/publish-mcp.yml` 在推送 `v*` tag 時把 `server.json` 發布到 registry。第一次發布是 2026-11-13 的 `v0.2.2`，條目名稱 `io.github.taux-io/carbon-mcp`。
 
 ```bash
 git tag v0.2.2 origin/main && git push origin v0.2.2
@@ -96,7 +97,7 @@ git tag v0.2.2 origin/main && git push origin v0.2.2
 - 認證用 GitHub OIDC，不需要任何長期 secret。命名空間 `io.github.taux-io/*` 由 repo 所在的組織證明。
 - 發布工具 `mcp-publisher` 固定版本並驗證檢查碼。升級時要同時改 workflow 裡的版本與 SHA256。
 - registry 不允許重發同一個版本。要重發就升版。
-- 發布後用 `npm run check-registry` 比對線上條目與 `server.json`。之後可以把它加進每日檢查；現在加會因為條目還不存在而每天失敗。
+- `npm run check-registry` 比對線上條目與 `server.json`。每日檢查也會跑它。
 
 本機可先驗證：下載同版本的 `mcp-publisher`，在 repo 根目錄執行 `mcp-publisher validate`（2026-11-13 驗證通過）。
 

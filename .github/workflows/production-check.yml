@@ -1,9 +1,12 @@
 name: production check
 
-# 每天對正式環境跑兩個檢查：
+# 每天對正式環境跑三個檢查：
 # - check-concepts：用詞對照表（src/concepts.ts）的每個字在即時資料裡都還找得到係數。
 #   產品碳足跡的名稱來自環境部，官方改名後對照會悄悄失效，離線測試抓不到。
 # - smoke：服務本身（網頁、MCP 兩個協定版本、REST 計算、同步狀態）是否正常。
+# - check-registry：官方 MCP Registry 上的條目，名稱與連線位址是否仍與 repo 的 server.json 一致。
+#   發佈 workflow 有 environment 把關，但那只管得到那支 workflow；條目若被別的途徑改掉，
+#   所有從 registry 安裝的人都會連到別處，所以每天比對一次。
 # 失敗時開一個 issue（已經有未關閉的就留言），恢復後自動關閉。
 
 on:
@@ -45,12 +48,16 @@ jobs:
           failed=""
           node scripts/check-concepts.mjs "$BASE_URL" > concepts.out 2>&1 || failed="check-concepts"
           node scripts/smoke.mjs "$BASE_URL" > smoke.out 2>&1 || failed="${failed:+$failed, }smoke"
+          node scripts/check-registry.mjs > registry.out 2>&1 || failed="${failed:+$failed, }check-registry"
           {
             echo "## check-concepts"
             tail -n 40 concepts.out
             echo
             echo "## smoke"
             tail -n 40 smoke.out
+            echo
+            echo "## check-registry"
+            tail -n 10 registry.out
           } > report.log
 
           cat report.log
@@ -96,7 +103,7 @@ jobs:
           fi
 
           what="${FAILED:-檢查沒有跑完}"
-          body=$(printf '每日檢查失敗：%s\n\n檢查對象：%s\n執行紀錄：%s\n\n```\n%s\n```\n\n- `check-concepts` 失敗：`src/concepts.ts` 裡有字在即時資料中已找不到係數（多半是環境部改了係數名稱），請更新對照表。\n- `smoke` 失敗：服務本身有問題，先看 `%s/health` 與 `%s/api/v1/status`。\n' "$what" "$BASE_URL" "$RUN_URL" "$LOG" "$BASE_URL" "$BASE_URL")
+          body=$(printf '每日檢查失敗：%s\n\n檢查對象：%s\n執行紀錄：%s\n\n```\n%s\n```\n\n- `check-concepts` 失敗：`src/concepts.ts` 裡有字在即時資料中已找不到係數（多半是環境部改了係數名稱），請更新對照表。\n- `smoke` 失敗：服務本身有問題，先看 `%s/health` 與 `%s/api/v1/status`。\n- `check-registry` 失敗：官方 MCP Registry 上的條目與 `server.json` 不一致或讀不到。若連線位址不是你自己改的，視為條目被竄改。\n' "$what" "$BASE_URL" "$RUN_URL" "$LOG" "$BASE_URL" "$BASE_URL")
 
           if [ -n "$open" ]; then
             gh issue comment "$open" --body "$body"

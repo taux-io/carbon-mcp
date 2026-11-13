@@ -7,7 +7,7 @@
 新增
 
 - 隱私權政策頁 `/privacy`（繁體中文，附英文摘要），每一頁的頁尾都有連結。
-- `server.json`：官方 MCP Registry 的條目定義。尚未發布。
+- `server.json`：官方 MCP Registry 的條目定義。已發布為 `io.github.taux-io/carbon-mcp`。
 
 ## 0.2.1（2026-11-13）
 
