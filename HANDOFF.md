@@ -44,7 +44,7 @@
 2. **Claude Directory 送件。** 表單要由你填。還沒準備的有：支援信箱、示範影片或截圖、公司資訊、服務條款頁。表單的欄位名稱與字數限制沒有查證過。送件文件的對應版本已改成 0.2.3；第 6 節的連接器實測是在 0.2.2 做的，那一處照實保留。
 3. **`calculate_batch` 與 `compare_emissions` 支援混合冷媒。** 已完成（0.2.4）。四個工具現在都接受 `refrigerant_blend`。
 4. **WAF 規則的漂移檢查。** 限流規則只存在 Cloudflare，repo 裡沒有，也沒有自動檢查。讀取規則需要另外的 API token，wrangler 的登入權杖讀不到。
-5. **Smithery 發布。** 還沒設定。`twse-mcp` 已經有，可以參考。
+5. ~~Smithery 發布~~：不做。Smithery 的帳號、API 金鑰與 CLI 已在 2026-10-31 停止服務（<https://www.smithery.ai/future>），網站改由 Arcade 經營，只保留公開目錄。2026-11-13 曾照 `twse-mcp` 加過發布 job（PR #4），確認後撤銷。`twse-mcp` 的 `smithery` job 與 README 的 Smithery 徽章也已失效（`smithery.ai/servers/taux/twse` 回 404），那邊另外處理。
 6. **確認「hreflang 只放 `<head>` 就夠」。** 兩個專案的 sitemap 都拿掉了語系連結，依據是我對 Google 文件的理解，這一輪沒有重新查證。之後若在 Search Console 看到語系相關的警告，先看這裡。
 
 ## 還沒驗證的事
