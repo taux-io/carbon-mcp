@@ -311,6 +311,60 @@ describe("refrigerant blends in batch and compare", () => {
       expect(data.total.emissions_kg).toBe("26005");
     });
   });
+
+  describe("compare_emissions", () => {
+    const compareBlends = (baseline: unknown, comparison: unknown) => tool("compare_emissions", { baseline, comparison });
+
+    it("splits two blends with the same components and the two effects add up to the difference", async () => {
+      const { data } = await compareBlends(blendItem(10, ["hfc-32", 50], ["hfc-125", 50]), blendItem(8, ["hfc-32", 50], ["hfc-125", 50]));
+      expect(data.baseline.kind).toBe("refrigerant_blend");
+      expect(data.comparison.emissions_kg).toBe("15388");
+      expect(data.result).toMatchObject({ baseline_emissions_kg: "19235", comparison_emissions_kg: "15388", difference_kg: "-3847", method_changed: false });
+      const d = data.result.decomposition;
+      expect([d.activity_effect_kg, d.factor_effect_kg]).toEqual(["-3847", "0"]);
+      expect(Number(d.activity_effect_kg) + Number(d.factor_effect_kg)).toBe(Number(data.result.difference_kg));
+    });
+
+    it("treats the same components as the same whatever the order or the way the share is written", async () => {
+      const { data } = await compareBlends(blendItem(10, ["hfc-32", 50], ["hfc-125", 50]), blendItem(8, ["hfc-125", "50.0"], ["hfc-32", 50]));
+      expect(data.result.method_changed).toBe(false);
+      expect(data.result.decomposition).toMatchObject({ activity_effect_kg: "-3847", factor_effect_kg: "0" });
+    });
+
+    it("gives only the difference when the components or the shares differ", async () => {
+      for (const other of [blendItem(10, ["hfc-32", 50], ["hfc-134a", 50]), blendItem(10, ["hfc-32", 60], ["hfc-125", 40])]) {
+        const { isError, data } = await compareBlends(blendItem(10, ["hfc-32", 50], ["hfc-125", 50]), other);
+        expect(isError).toBe(false);
+        expect(data.result.method_changed).toBe(true);
+        expect(data.result.decomposition).toBeNull();
+        expect(data.result.method_change_reasons.join()).toContain("成分不同");
+        expect(data.result.method_change_reasons.join()).toContain("沒有官方公布的單一係數");
+        expect(Number(data.result.difference_kg)).toBe(Number(data.comparison.emissions_kg) - Number(data.baseline.emissions_kg));
+      }
+    });
+
+    it("does not split a single factor against a blend, in either direction", async () => {
+      const mixed = await compareBlends(single("hfc-32", 10), blendItem(10, ["hfc-32", 50], ["hfc-125", 50]));
+      expect(mixed.data.baseline.factor.id).toBe(gas("hfc-32"));
+      expect(mixed.data.comparison.kind).toBe("refrigerant_blend");
+      expect(mixed.data.result).toMatchObject({ difference_kg: "12465", method_changed: true, decomposition: null });
+      expect(mixed.data.result.method_change_reasons.join()).toContain("一邊是單一係數");
+      const reverse = await compareBlends(blendItem(10, ["hfc-32", 50], ["hfc-125", 50]), single("hfc-32", 10));
+      expect(reverse.data.result).toMatchObject({ difference_kg: "-12465", decomposition: null });
+    });
+
+    it("still splits two single factors as before", async () => {
+      const { data } = await compareBlends(single("hfc-32", 10), single("hfc-32", 4));
+      expect(data.result).toMatchObject({ difference_kg: "-4062", decomposition: { activity_effect_kg: "-4062", factor_effect_kg: "0" } });
+    });
+
+    it("answers comparison_failed when either side cannot be calculated", async () => {
+      const bad = await compareBlends(blendItem(10, ["hfc-32", 50], ["hfc-125", 40]), single("hfc-32", 10));
+      expect([bad.isError, bad.data.error.code, bad.data.error.details.baseline.code, bad.data.error.details.comparison]).toEqual([true, "comparison_failed", "invalid_composition", "ok"]);
+      const noBasis = await compareBlends(single("hfc-32", 10), { ...blend(["hfc-32", 50], ["hfc-125", 50]), quantity: 10, quantity_unit: "kg" });
+      expect(noBasis.data.error.details.comparison.code).toBe("missing_refrigerant_basis");
+    });
+  });
 });
 
 describe("MCP transport guards", () => {
