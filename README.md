@@ -108,7 +108,7 @@ npm run dry-run                       # 確認 Worker 能 bundle
 
 沒有驗證的事：
 
-- 限流只是近似值：單一連線連續送會在上限附近被擋，但平行送 600 次沒有一次被擋。細節與處理方向見 [`docs/deployment.md`](docs/deployment.md)。
+- 限流有兩層，都實測過：zone 的 WAF 規則擋平行洪水（平行 300 次中 193 次得到 429），Worker 內的限流擋單一連線的失控迴圈。WAF 規則與 `twse-mcp` 共用計數。見 [`docs/deployment.md`](docs/deployment.md) 的「限流」。
 - 網站已用無頭 Chrome 檢查三個語系、手機與桌面寬度、深淺色共 12 種組合（無水平捲動、對比足夠），並目視看過截圖；沒有在實體手機上看過。
 
 正式環境另有每日自動檢查（對照表與冒煙測試），失敗時會開 issue，見 [`docs/deployment.md`](docs/deployment.md)。

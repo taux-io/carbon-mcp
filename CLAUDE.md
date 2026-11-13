@@ -78,6 +78,7 @@ npm run check-rate-limit                   # 確認正式環境的限流有在�
 - 工具失敗回 `isError: true` 加 `{ ok: false, error: { code, message, details } }`；REST 用同一個形狀配 HTTP 狀態碼。
 - 註解與文件用繁體中文（台灣用語），只寫程式碼看不出來的「為什麼」。
 - 上游可能回 2xx 的錯誤頁（環境部缺金鑰時回 200 加純文字），一律先讀文字再自己判斷。
+- 限流有兩層：zone 的 WAF 規則（不在 repo 裡，與 `twse-mcp` 共用一條與同一個計數）與 Worker 的限流綁定。新增對外路徑時要想到 WAF 規則的條件是否涵蓋它；見 `docs/deployment.md` 的「限流」。
 - 會影響 Cloudflare 資源、DNS 或正式環境的操作（`wrangler deploy`、`d1 create`、`--remote`、設定 secret）先列出變更並取得確認。
 
 ## 正式環境的每日檢查

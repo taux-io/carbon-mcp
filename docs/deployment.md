@@ -11,6 +11,7 @@
 | Custom Domain `carbon.taux.io` | 新增 | `wrangler.jsonc` 的 `routes` 以 `custom_domain: true` 宣告；部署時會在 `taux.io` zone 建立對應的 DNS 紀錄與憑證。**這會修改 taux.io 的 DNS。** |
 | Cron Trigger `30 19 * * *` | 新增 | 每天 03:30（台灣時間）跑同步。 |
 | Rate Limiting 綁定 `RATE_LIMITER` | 新增 | Workers 的限流綁定，每個來源 IP 每 60 秒 120 次。不占用 zone 的 WAF 限流規則。 |
+| zone 的 WAF 限流規則 | 修改（共用） | 擴大既有規則的條件以涵蓋本服務。與 `twse-mcp` 共用，見「限流」一節。 |
 | Secret `MOENV_API_KEY` | 新增（選用） | 環境部 API 金鑰。沒有設定時只是略過 `CFP_P_02` 的同步。 |
 | Workers Logs | 啟用 | `observability` 已在設定檔開啟。 |
 
@@ -50,12 +51,64 @@ npm run smoke -- https://carbon.taux.io
 
 - **政府網站是否擋 Cloudflare 的對外連線。** 查證是從開發機做的。`https://www.moeaea.gov.tw`（電力 CSV 交叉檢查）與 `https://data.moenv.gov.tw`（`CFP_P_02`）要從部署後的 Worker 實際連一次。被擋時交叉檢查會記為 `failed`、來源標為 `stale`，可在 `/api/v1/status` 看到；已匯入的係數不受影響。
 - **`CFP_P_02` 第一次同步的結果。** 回應結構與紀錄唯一性尚未以金鑰實測。第一次同步後檢查 `/api/v1/status`：如果因為「無法區分的重複紀錄」而失敗，需要依實際資料調整 `src/sync.ts` 中 `cfpToFactor` 的 ID 規則。
-- **限流是否生效。** 2026-11-13 實測，結論是「有效，但只是近似值」：
-  - 用同一條連線連續送，約第 104 次開始得到 429，並帶 `Retry-After: 60`。`npm run check-rate-limit` 可重現。
-  - 用 8 到 16 條平行連線，160 次（3 秒內）與 600 次（24 秒內）**全部通過，沒有一次 429**。
-  - 原因是 Workers 的限流綁定在每台機器各自計數、背景同步，官方文件明說請求可以超過設定的上限。平行請求散到不同機器，每台的計數都到不了 120。本機的 `wrangler dev` 只有一個計數器，所以本機測試是剛好 120 次放行。
-  - 意思是它擋得住單一客戶端的失控迴圈，擋不住刻意平行送的流量。要嚴格的上限有兩條路：在 taux.io zone 加 WAF 限流規則（在進 Worker 之前擋，但免費方案只有一條規則，目前用在 `twse-mcp`，要改規則的條件才能涵蓋本服務），或用 Durable Object 自己計數。兩者都還沒做。
+- **限流。** 有兩層，2026-11-13 都實測過。細節見下面的「限流」一節。
 - **MCP 客戶端連線。** 至少用 Claude 與一個只支援舊版協定的客戶端各連一次。
+
+## 限流
+
+有兩層。外層擋平行洪水，內層擋單一客戶端的失控迴圈。
+
+| | 外層：zone 的 WAF 限流規則 | 內層：Worker 的限流綁定 |
+|---|---|---|
+| 位置 | 進 Worker 之前 | Worker 程式內（`src/server.ts`） |
+| 門檻 | 同一 IP、同一機房，每 10 秒 100 次 | 同一 IP 每 60 秒 120 次 |
+| 準確度 | 精確 | 近似。每台機器各自計數、背景同步 |
+| 超限的回應 | Cloudflare 的 429，純文字 `error code: 1015`，帶 `Retry-After` | 本服務的 429 JSON，`Retry-After: 60` |
+| 涵蓋 | `/mcp` 與 `/api/` 開頭的路徑 | 同左 |
+| 設定在哪 | Cloudflare 儀表板（不在這個 repo） | `wrangler.jsonc` 的 `ratelimits` |
+
+### 為什麼需要外層
+
+只有內層時，平行連線的請求擋不住。實測（規則擴大之前）：8 到 16 條平行連線送 160 次與 600 次，**全部通過，沒有一次 429**；同一條連線連續送則在第 104 次左右開始被擋。原因是限流綁定在每台機器各自計數，平行請求散到不同機器，每台都到不了 120。官方文件明說請求可以超過設定的上限。本機的 `wrangler dev` 只有一個計數器，所以本機測試看不出這個問題。
+
+### 外層規則的內容
+
+taux.io zone 是 Free 方案，只能有一條限流規則，時間窗與封鎖時間固定 10 秒。這一條由 `twse-mcp` 與本服務共用。2026-11-13 把條件從只涵蓋 `twse-mcp` 擴大到也涵蓋本服務：
+
+```
+(http.host eq "twse-mcp.taux.io" and http.request.uri.path eq "/mcp") or (http.host eq "carbon.taux.io" and (http.request.uri.path eq "/mcp" or starts_with(http.request.uri.path, "/api/")))
+```
+
+- 說明：`taux.io MCP abuse guard (twse /mcp; carbon /mcp and /api, per IP)`
+- 計數依據：`ip.src`、`cf.colo.id`。門檻：每 10 秒 100 次。動作：`block` 10 秒。
+
+擴大後的實測：
+
+| 測試 | 結果 |
+|---|---|
+| `/api/v1/sources` 平行 300 次（5 秒） | 107 次 200，193 次 429 |
+| `/mcp` 平行 250 次 POST（5 秒） | 101 次 200，149 次 429 |
+| 封鎖期間的首頁與 `/privacy` | 200，不在規則範圍內 |
+| 封鎖解除後（約 10 秒） | 恢復 200 |
+| 連續跑 `check-concepts` 與 `smoke`（每日檢查的負載） | 全部通過，不會誤觸 |
+
+### 共用計數
+
+一條規則對每個 IP（在同一機房）只有一個計數器，所以**同一 IP 打 `twse-mcp` 與本服務的請求會合併計算**。實測：本服務被擋的那 10 秒內，同一 IP 打 `twse-mcp` 的 `/mcp` 也得到 429。所有 Claude 使用者共用 Anthropic 的出口 IP，兩個服務的合法流量加起來若超過每 10 秒 100 次，會互相影響。目前流量離門檻很遠；流量成長後要重新評估，那時的選項是升級 zone 方案以取得多條規則，或調高門檻。
+
+### 修改或還原
+
+規則不在 repo 裡。用 API 修改需要一把權限為「Zone WAF：Edit」、範圍限 taux.io 的權杖；Wrangler 的登入權杖沒有這個權限。也可以在儀表板改：taux.io → Security → WAF → Rate limiting rules。
+
+要還原成擴大前的狀態，把條件與說明改回：
+
+```
+(http.host eq "twse-mcp.taux.io" and http.request.uri.path eq "/mcp")
+```
+
+說明：`twse-mcp abuse guard (/mcp, per IP)`。其他欄位沒有動過。
+
+`npm run check-rate-limit` 用單一連線連續送請求，確認至少有一層會回 429。
 
 ## 每日檢查
 
