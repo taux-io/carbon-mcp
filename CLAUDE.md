@@ -20,6 +20,7 @@ npm run dev                                # wrangler dev --test-scheduled
 npm run seed:local                         # 觸發一次排程，把已審核資料寫進本機 D1（dev 要先跑著）
 npm run smoke                              # 對跑著的服務做端到端檢查（可帶 base URL）
 npm run check-concepts                     # 檢查用詞對照表的每個字在跑著的服務上都找得到係數
+npm run make-og && npm run make-icons     # 重新產生分享圖與網站圖示（輸出到 src/og-image.ts、src/icons.ts，請勿手改那兩個檔）
 npm run check-rate-limit                   # 確認正式環境的限流有在運作（用單一連線；會讓你的 IP 被限流約一分鐘）
 ```
 

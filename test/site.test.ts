@@ -34,12 +34,22 @@ describe("homepage", () => {
     expect(html).toContain('hreflang="x-default" href="https://carbon.taux.io/"');
   });
 
-  it("has Open Graph and Twitter meta but no image that could be missing", () => {
+  it("has Open Graph and Twitter meta with an absolute image URL and its size", () => {
     for (const html of Object.values(PAGES)) {
       expect(html).toContain('property="og:title"');
-      expect(html).toContain('name="twitter:card"');
-      expect(html).not.toContain("og:image");
-      expect(html).not.toContain("twitter:image");
+      expect(html).toContain('<meta property="og:image" content="https://carbon.taux.io/og.png">');
+      expect(html).toContain('<meta property="og:image:width" content="1200">');
+      expect(html).toContain('<meta property="og:image:height" content="630">');
+      expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
+      expect(html).toContain('<meta name="twitter:image" content="https://carbon.taux.io/og.png">');
+    }
+  });
+
+  it("links the favicon and touch icon on every page", () => {
+    for (const html of [...Object.values(PAGES), TOOLS_HTML, API_DOCS_HTML]) {
+      expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml">');
+      expect(html).toContain('<link rel="icon" href="/favicon.ico" sizes="48x48">');
+      expect(html).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png">');
     }
   });
 

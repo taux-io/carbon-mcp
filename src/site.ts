@@ -17,6 +17,8 @@ import { TOOLS } from "./tools";
 import type { SourceStatus } from "./types";
 
 export type Locale = "zh" | "en" | "ja";
+import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH } from "./og-image";
+
 const SITE_ORIGIN = "https://carbon.taux.io";
 const MCP_ENDPOINT = `${SITE_ORIGIN}/mcp`;
 const REPO = "https://github.com/taux-io/carbon-mcp";
@@ -664,6 +666,9 @@ function shell(o: ShellOpts): string {
 <title>${esc(o.title)}</title>
 <meta name="description" content="${esc(o.description)}">
 <link rel="canonical" href="${o.canonical}">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 ${o.head ?? ""}
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${SITE_NAME}">
@@ -671,7 +676,12 @@ ${o.head ?? ""}
 <meta property="og:description" content="${esc(o.description)}">
 <meta property="og:url" content="${o.canonical}">
 <meta property="og:locale" content="${o.ogLocale}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="${SITE_ORIGIN}/og.png">
+<meta property="og:image:width" content="${OG_IMAGE_WIDTH}">
+<meta property="og:image:height" content="${OG_IMAGE_HEIGHT}">
+<meta property="og:image:type" content="image/png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${SITE_ORIGIN}/og.png">
 <meta name="twitter:title" content="${esc(o.title)}">
 <meta name="twitter:description" content="${esc(o.description)}">
 <meta name="robots" content="index,follow">

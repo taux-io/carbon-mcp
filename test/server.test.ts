@@ -387,6 +387,42 @@ describe("site routes", () => {
     expect((await res.text()).length).toBeGreaterThan(50);
   });
 
+  const bytes = async (path: string) => new Uint8Array(await (await get(path)).arrayBuffer());
+  const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  const pngSize = (b: Uint8Array) => { const v = new DataView(b.buffer); return [v.getUint32(16), v.getUint32(20)]; };
+
+  it("serves the share image as a 1200×630 PNG with a long cache", async () => {
+    const res = await get("/og.png");
+    expect([res.status, res.headers.get("content-type")]).toEqual([200, "image/png"]);
+    expect(res.headers.get("cache-control")).toContain("max-age=86400");
+    const b = await bytes("/og.png");
+    expect([...b.slice(0, 8)]).toEqual(PNG_SIGNATURE);
+    expect(pngSize(b)).toEqual([1200, 630]);
+  });
+
+  it("serves the favicon as SVG and as an ICO holding 16, 32 and 48 pixel images", async () => {
+    const svg = await get("/favicon.svg");
+    expect(svg.headers.get("content-type")).toBe("image/svg+xml");
+    expect(await svg.text()).toMatch(/^<svg xmlns='http:\/\/www\.w3\.org\/2000\/svg'/);
+    const ico = await bytes("/favicon.ico");
+    const v = new DataView(ico.buffer);
+    expect([v.getUint16(0, true), v.getUint16(2, true), v.getUint16(4, true)]).toEqual([0, 1, 3]);
+    expect([ico[6], ico[22], ico[38]]).toEqual([16, 32, 48]);
+    expect((await get("/favicon.ico")).headers.get("content-type")).toBe("image/x-icon");
+  });
+
+  it("serves a 180×180 apple touch icon", async () => {
+    const b = await bytes("/apple-touch-icon.png");
+    expect([...b.slice(0, 8)]).toEqual(PNG_SIGNATURE);
+    expect(pngSize(b)).toEqual([180, 180]);
+  });
+
+  it("answers HEAD for an image without a body", async () => {
+    const res = await send(new Request("https://carbon.taux.io/og.png", { method: "HEAD" }));
+    expect(res.status).toBe(200);
+    expect((await res.arrayBuffer()).byteLength).toBe(0);
+  });
+
   it("does not serve the homepage for unknown paths", async () => {
     for (const path of ["/admin", "/.env", "/wp-login.php"]) expect((await get(path)).status).toBe(404);
   });

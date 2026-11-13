@@ -9,6 +9,8 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 
 import { handleApi, readBounded } from "./api";
+import { APPLE_ICON_BASE64, FAVICON_ICO_BASE64, FAVICON_SVG } from "./icons";
+import { OG_IMAGE_BASE64 } from "./og-image";
 import { ATTRIBUTION, ping, SERVICE_NAME, VERSION } from "./service";
 import { API_DOCS_HTML, COPY_SCRIPT_HASH, LLMS_FULL_TXT, LLMS_TXT, renderPage, ROBOTS_TXT, SITEMAP_XML, TOOLS_HTML } from "./site";
 import { runScheduled } from "./sync";
@@ -77,7 +79,18 @@ const SITE_HEADERS: Record<string, string> = {
 const HTML = "text/html; charset=utf-8";
 
 /** 只有列在這裡的路徑會回靜態內容；首頁不是 catch-all，未知路徑一律 404。 */
-const STATIC_ROUTES: Record<string, { body: string; type: string }> = {
+/** base64 常數在模組載入時解一次；每個請求重解只是浪費 CPU。 */
+const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
+// 圖只隨部署改變，而抓取端（Slack、X、Discord…）會重複來拿，所以放長快取。
+const IMAGE_CACHE = "public, max-age=86400, s-maxage=604800";
+
+const STATIC_ROUTES: Record<string, { body: string | Uint8Array; type: string; cache?: string }> = {
+  "/og.png": { body: decode(OG_IMAGE_BASE64), type: "image/png", cache: IMAGE_CACHE },
+  "/favicon.svg": { body: FAVICON_SVG, type: "image/svg+xml", cache: IMAGE_CACHE },
+  // 瀏覽器與爬蟲不讀 <link> 時會直接來要 /favicon.ico。
+  "/favicon.ico": { body: decode(FAVICON_ICO_BASE64), type: "image/x-icon", cache: IMAGE_CACHE },
+  "/apple-touch-icon.png": { body: decode(APPLE_ICON_BASE64), type: "image/png", cache: IMAGE_CACHE },
   "/": { body: renderPage("zh"), type: HTML },
   "/en": { body: renderPage("en"), type: HTML },
   "/ja": { body: renderPage("ja"), type: HTML },
@@ -126,7 +139,9 @@ export default {
     if (request.method === "GET" || request.method === "HEAD") {
       const route = STATIC_ROUTES[path];
       if (route) {
-        return new Response(request.method === "HEAD" ? null : route.body, { headers: { "content-type": route.type, ...SITE_HEADERS } });
+        return new Response(request.method === "HEAD" ? null : route.body, {
+          headers: { "content-type": route.type, ...SITE_HEADERS, ...(route.cache ? { "cache-control": route.cache } : {}) },
+        });
       }
       if (path === "/health") {
         let database = "not_configured";
