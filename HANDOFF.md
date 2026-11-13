@@ -7,7 +7,7 @@
 | 項目 | 狀態 |
 |---|---|
 | 正式環境 | `https://carbon.taux.io`，`/health` 回報 0.2.5，資料庫正常 |
-| 分支 | `main`，本機與 `origin/main` 相同。正式環境跑的是 `8218998`（0.2.5 加上 `/terms` 頁，沒有升版），之後的 commit 只改 smoke 腳本與文件 |
+| 分支 | `main`，本機與 `origin/main` 相同。正式環境跑的是 `76aa7b7`（0.2.5 加上 `/terms` 與準據法段落，沒有升版），之後的 commit 只改文件 |
 | Tag | `v0.2.5` 已推送 |
 | 官方 MCP Registry | `io.github.taux-io/carbon-mcp` 最新版本 0.2.5（2026-11-13 發布，狀態 active） |
 | 服務條款 | `https://carbon.taux.io/terms` 已上線（2026-11-13），每一頁頁尾都有連結，sitemap 有收錄 |
