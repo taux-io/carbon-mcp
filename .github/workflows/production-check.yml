@@ -1,0 +1,105 @@
+name: production check
+
+# 每天對正式環境跑兩個檢查：
+# - check-concepts：用詞對照表（src/concepts.ts）的每個字在即時資料裡都還找得到係數。
+#   產品碳足跡的名稱來自環境部，官方改名後對照會悄悄失效，離線測試抓不到。
+# - smoke：服務本身（網頁、MCP 兩個協定版本、REST 計算、同步狀態）是否正常。
+# 失敗時開一個 issue（已經有未關閉的就留言），恢復後自動關閉。
+
+on:
+  schedule:
+    # 20:15 UTC = 台灣時間 04:15，排在每日資料同步（03:30）之後。
+    - cron: "15 20 * * *"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "要檢查的服務網址（預設正式環境；用來測試這個 workflow 的失敗路徑）"
+        required: false
+        default: "https://carbon.taux.io"
+
+concurrency:
+  group: production-check
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  # 這個 job 會執行 repo 裡的程式，所以只給讀取權限。
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      failed: ${{ steps.run.outputs.failed }}
+      log: ${{ steps.run.outputs.log }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          # 兩支腳本都沒有相依套件；check-concepts 直接載入 TypeScript 原始檔，需要 Node 24 以上。
+          node-version: "24"
+      - id: run
+        env:
+          BASE_URL: ${{ inputs.base_url || 'https://carbon.taux.io' }}
+        run: |
+          failed=""
+          node scripts/check-concepts.mjs "$BASE_URL" > concepts.out 2>&1 || failed="check-concepts"
+          node scripts/smoke.mjs "$BASE_URL" > smoke.out 2>&1 || failed="${failed:+$failed, }smoke"
+          {
+            echo "## check-concepts"
+            tail -n 40 concepts.out
+            echo
+            echo "## smoke"
+            tail -n 40 smoke.out
+          } > report.log
+
+          cat report.log
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          {
+            echo "log<<LOG_EOF"
+            head -c 60000 report.log
+            echo
+            echo "LOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - if: steps.run.outputs.failed != ''
+        run: |
+          echo "failed: ${{ steps.run.outputs.failed }}"
+          exit 1
+
+  # 這個 job 有寫 issue 的權限，所以不取出也不執行 repo 裡的任何程式，只用 gh。
+  report:
+    needs: check
+    if: always() && needs.check.result != 'cancelled' && needs.check.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      LABEL: production-check
+      FAILED: ${{ needs.check.outputs.failed }}
+      CHECK_RESULT: ${{ needs.check.result }}
+      LOG: ${{ needs.check.outputs.log }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      BASE_URL: ${{ inputs.base_url || 'https://carbon.taux.io' }}
+    steps:
+      - name: Open, update or close the issue
+        run: |
+          gh label create "$LABEL" --color B60205 --description "正式環境每日檢查失敗" 2>/dev/null || true
+          open=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+
+          if [ "$CHECK_RESULT" = "success" ]; then
+            if [ -n "$open" ]; then
+              gh issue close "$open" --comment "檢查已恢復正常（$BASE_URL）。$RUN_URL"
+            fi
+            exit 0
+          fi
+
+          what="${FAILED:-檢查沒有跑完}"
+          body=$(printf '每日檢查失敗：%s\n\n檢查對象：%s\n執行紀錄：%s\n\n```\n%s\n```\n\n- `check-concepts` 失敗：`src/concepts.ts` 裡有字在即時資料中已找不到係數（多半是環境部改了係數名稱），請更新對照表。\n- `smoke` 失敗：服務本身有問題，先看 `%s/health` 與 `%s/api/v1/status`。\n' "$what" "$BASE_URL" "$RUN_URL" "$LOG" "$BASE_URL" "$BASE_URL")
+
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$body"
+          else
+            gh issue create --title "正式環境每日檢查失敗：$what" --label "$LABEL" --body "$body"
+          fi

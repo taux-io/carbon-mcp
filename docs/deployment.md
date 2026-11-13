@@ -53,6 +53,24 @@ npm run smoke -- https://carbon.taux.io
 - **限流是否生效。** 短時間內送超過 120 次請求應得到 429。
 - **MCP 客戶端連線。** 至少用 Claude 與一個只支援舊版協定的客戶端各連一次。
 
+## 每日檢查
+
+`.github/workflows/production-check.yml` 每天台灣時間 04:15（排在 03:30 的資料同步之後）對 `https://carbon.taux.io` 跑兩個檢查：
+
+- `npm run check-concepts`：用詞對照表（`src/concepts.ts`）的每個字在即時資料裡都還找得到係數。環境部改了係數名稱時，這裡會先發現。
+- `npm run smoke`：網頁、MCP 兩個協定版本、REST 計算與同步狀態。
+
+任一項失敗就開一個標籤為 `production-check` 的 issue，附上輸出與執行紀錄的連結；已經有未關閉的 issue 時改為留言，不重複開。之後檢查恢復正常會自動關閉那個 issue。
+
+也可以手動執行，並指定要檢查的網址：
+
+```bash
+gh workflow run production-check.yml
+gh workflow run production-check.yml -f base_url=https://carbon.taux.io
+```
+
+這個 workflow 分成兩個 job：執行 repo 程式的 `check` 只有讀取權限；有寫 issue 權限的 `report` 不取出也不執行 repo 裡的程式。
+
 ## 回復
 
 `npx wrangler rollback` 回到上一個版本。D1 的 schema 變更不會跟著回復；係數資料可由排程從 `src/data/reviewed.ts` 重新匯入。

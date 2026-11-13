@@ -105,6 +105,8 @@ npm run dry-run                       # 確認 Worker 能 bundle
 沒有驗證的事：
 
 - 限流綁定沒有實際送超過上限的請求驗證。
+
+正式環境另有每日自動檢查（對照表與冒煙測試），失敗時會開 issue，見 [`docs/deployment.md`](docs/deployment.md)。
 - 網站沒有在瀏覽器中目視檢查（手機版、深色模式、無障礙），只有自動化測試檢查結構。
 - 沒有用實際的 MCP 客戶端（Claude、Cursor 等）連線測試。
 

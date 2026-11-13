@@ -74,6 +74,10 @@ npm run check-concepts                     # 檢查用詞對照表的每個字�
 - 上游可能回 2xx 的錯誤頁（環境部缺金鑰時回 200 加純文字），一律先讀文字再自己判斷。
 - 會影響 Cloudflare 資源、DNS 或正式環境的操作（`wrangler deploy`、`d1 create`、`--remote`、設定 secret）先列出變更並取得確認。
 
+## 正式環境的每日檢查
+
+`.github/workflows/production-check.yml` 每天對正式環境跑 `check-concepts` 與 `smoke`，失敗時開標籤為 `production-check` 的 issue，恢復後自動關閉。改 `src/concepts.ts` 或 `scripts/smoke.mjs`（例如工具數量改變）後，部署完用 `gh workflow run production-check.yml` 跑一次確認。細節見 `docs/deployment.md`。
+
 ## 尚未完成
 
 見 `README.md` 的「已完成與未完成」。
