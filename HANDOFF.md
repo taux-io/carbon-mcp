@@ -1,18 +1,19 @@
 # 交接紀錄
 
-寫於 2026-11-13，0.2.3 發布之後；狀態表已更新到 0.2.4 部署之後。這份文件記錄這一輪做了什麼、目前的狀態、以及接下來可以做的事。專案的規則與架構在 `CLAUDE.md`，部署與發版流程在 `docs/deployment.md`，這裡不重複。
+寫於 2026-11-13，0.2.3 發布之後；狀態表已更新到 0.2.5 部署之後。這份文件記錄這一輪做了什麼、目前的狀態、以及接下來可以做的事。專案的規則與架構在 `CLAUDE.md`，部署與發版流程在 `docs/deployment.md`，這裡不重複。
 
 ## 目前狀態
 
 | 項目 | 狀態 |
 |---|---|
-| 正式環境 | `https://carbon.taux.io`，`/health` 回報 0.2.4，資料庫正常 |
-| 分支 | `main`，本機與 `origin/main` 相同。正式環境跑的是 `934133f`（0.2.4），之後的 commit 只改文件 |
-| Tag | `v0.2.4` 已推送 |
-| 官方 MCP Registry | `io.github.taux-io/carbon-mcp` 最新版本 0.2.4（2026-11-13 發布，狀態 active） |
+| 正式環境 | `https://carbon.taux.io`，`/health` 回報 0.2.5，資料庫正常 |
+| 分支 | `main`，本機與 `origin/main` 相同。正式環境跑的是 `e004141`（0.2.5），之後的 commit 只改文件 |
+| Tag | `v0.2.5` 已推送 |
+| 官方 MCP Registry | `io.github.taux-io/carbon-mcp` 最新版本 0.2.5（2026-11-13 發布，狀態 active） |
+| 含氟氣體係數 | 46 筆都是版本 3（使用限制列出四個接受 `refrigerant_blend` 的工具）；版本 1、2 保留在 `factor_versions` |
 | 排程 | `30 19 * * *`（台灣時間 03:30），只有這一條 |
 | 測試 | 8 個檔案、238 項通過；`main` 的 CI 通過 |
-| 每日檢查 | 0.2.4 部署後手動觸發一次，通過；沒有未關閉的 `production-check` issue |
+| 每日檢查 | 0.2.5 部署後手動觸發一次，通過；沒有未關閉的 `production-check` issue |
 
 ## 這一輪做了什麼
 
@@ -29,7 +30,7 @@
 
 ## 這一輪學到的事
 
-- **改 `src/data/reviewed.ts` 的任何欄位都會讓係數升版本**，包括說明文字。而且部署當下不會生效，要等排程跑過。要立刻生效可以用 `npx wrangler deploy --triggers "* * * * *"` 暫時改排程，等匯入完成後再 `npx wrangler deploy` 改回。這會動到正式環境，每次都要先取得確認。整個過程約 6 分鐘，不需要改 `wrangler.jsonc`。
+- **改 `src/data/reviewed.ts` 的任何欄位都會讓係數升版本**，包括說明文字。而且部署當下不會生效，要等排程跑過。要立刻生效可以用 `npx wrangler deploy --triggers "* * * * *"` 暫時改排程，等匯入完成後再 `npx wrangler deploy` 改回。這會動到正式環境，每次都要先取得確認。整個過程約 6 到 8 分鐘（0.2.5 那次是部署後約 8 分鐘才匯入），不需要改 `wrangler.jsonc`。
 - **部署要指定 Cloudflare 帳號。** wrangler 登入了三個帳號，`wrangler.jsonc` 沒有寫 `account_id`，非互動模式下 `wrangler deploy` 會失敗。`carbon-mcp` 在「拓思科技股份有限公司」帳號，指令前加 `CLOUDFLARE_ACCOUNT_ID=5164de0801b523f919f7a9eac9bbf9bf`。
 - **MCP 用戶端會快取工具清單。** 部署新的工具說明之後，已連線的用戶端看到的還是舊說明。要確認伺服器實際回什麼，直接對 `/mcp` 送 `tools/list`。
 - **不要把未 commit 的改動留在別的工作階段正在用的工作目錄。** `twse-mcp` 的 sitemap 修正就是這樣被另一個工作階段的 commit 帶走，沒有經過確認就合併上線。之後在共用的工作目錄做事，先開分支或用 worktree。
