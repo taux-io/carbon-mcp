@@ -66,11 +66,11 @@ describe("homepage", () => {
     }
   });
 
-  it("presents the source that is not imported yet honestly", () => {
+  it("points to the live status for the API-synced source instead of claiming a state", () => {
     expect(SOURCES.some((s) => s.status === "pending_key")).toBe(true);
-    expect(PAGES.zh).toContain("尚未匯入");
-    expect(PAGES.en).toContain("Not yet imported");
-    expect(PAGES.ja).toContain("未取り込み");
+    expect(PAGES.zh).toContain("即時狀態見 /api/v1/status");
+    expect(PAGES.en).toContain("live status at /api/v1/status");
+    expect(PAGES.ja).toContain("最新の状態は /api/v1/status");
   });
 
   it("links the supporting pages and never claims AI crawling is guaranteed", () => {

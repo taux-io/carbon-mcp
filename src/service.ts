@@ -36,6 +36,7 @@ function summary(f: StoredFactor) {
     unit: f.original_unit,
     normalized_unit: f.denominator_unit ? `${f.numerator_unit}${f.gas_basis}/${f.denominator_unit}` : null,
     reference_year: f.reference_year,
+    announcement_year: f.announcement_year,
     announcement_date: f.announcement_date,
     category: f.category,
     factor_type: f.factor_type,
@@ -66,7 +67,7 @@ export async function search(db: D1Database, params: Partial<SearchParams>) {
     offset: Math.max(0, p.offset),
     factors: items.map(summary),
     ...(total === 0
-      ? { message: NOT_FOUND_MESSAGE, hint: "產品碳足跡係數（環境部 CFP_P_02）尚未匯入；目前收錄電力、自來水與常用燃料的燃燒排放係數。可用 list_data_sources 查看各來源的狀態。" }
+      ? { message: NOT_FOUND_MESSAGE, hint: "搜尋比對的是官方的係數名稱，請試試更具體或不同的用詞（例如「塑膠原料」改查「聚丙烯」「聚乙烯」）。可用 list_data_sources 查看各來源的狀態與筆數。" }
       : {}),
     attribution: ATTRIBUTION,
   };
@@ -277,7 +278,8 @@ const METHODOLOGY = {
   product_footprint: {
     title: "產品碳足跡係數",
     body: [
-      "來源：環境部碳足跡排放係數資料集（CFP_P_02）。目前尚未匯入。",
+      "來源：環境部碳足跡排放係數資料集（CFP_P_02），透過 API 同步。",
+      "以包、瓶、片等件數計的係數，以及官方資料中名稱、單位、發布單位、公告年份都相同而數值不同的紀錄，僅供查詢，不提供計算。",
       "這類係數是產品生命週期碳足跡，不代表可直接用於組織溫室氣體盤查，也不可與組織盤查的結果相加。",
       "每件產品的碳足跡不可當成每公斤材料的係數。",
     ],

@@ -123,7 +123,7 @@ describe("carbon footprint sync", () => {
     ["an empty result", "[]"],
     ["a non-numeric value", JSON.stringify([record("A", "N/A")])],
     ["a record without a unit", JSON.stringify([record("A", "1", "")])],
-    ["indistinguishable duplicate records", JSON.stringify([record("A", "1"), record("A", "2")])],
+    ["fully identical duplicate rows", JSON.stringify([record("A", "1"), record("A", "1")])],
     ["an unexpected envelope", JSON.stringify({ result: "ok" })],
   ])("writes nothing on %s", async (_name, body) => {
     await syncCarbonFootprint(db, "k", respond(JSON.stringify([record("既有係數", "3")])), NOW);
@@ -141,10 +141,36 @@ describe("carbon footprint sync", () => {
     expect(await cfpCount()).toBe(10);
   });
 
-  it("gives the same record the same ID every time", async () => {
+  it("gives the same record the same ID every time, and a different value a different ID", async () => {
     const a = await cfpToFactor(record("聚乙烯塑膠粒", "1.87"));
-    const b = await cfpToFactor({ ...record("聚乙烯塑膠粒", "1.90") });
-    expect(a.id).toBe(b.id);
+    expect((await cfpToFactor(record("聚乙烯塑膠粒", "1.87"))).id).toBe(a.id);
+    expect((await cfpToFactor(record("聚乙烯塑膠粒", "1.90"))).id).not.toBe(a.id);
     expect(a.id).toMatch(/^cfp-[0-9a-f]{16}$/);
+  });
+
+  // 實測：乙烯在同一發布單位、同一公告年份有 1.75 與 1.88 兩筆，來源沒有區分依據。
+  it("imports same-name records with different values as separate lookup-only factors", async () => {
+    const r = await syncCarbonFootprint(db, "k", respond(JSON.stringify([record("乙烯", "1.75"), record("乙烯", "1.88"), record("丙烯", "1.75")])), NOW);
+    expect(r).toMatchObject({ status: "success", records_ok: 3 });
+    const { items } = await searchFactors(db, { query: "烯", category: "product_footprint", limit: 10, offset: 0 });
+    expect(items.map((f) => [f.name, f.value, f.calculability]).sort()).toEqual([["丙烯", "1.75", "direct"], ["乙烯", "1.75", "lookup_only"], ["乙烯", "1.88", "lookup_only"]]);
+  });
+
+  it("reads the unit abbreviation MOENV writes in parentheses and keeps per-item units lookup-only", async () => {
+    const units = { "公斤(kg)": "kg", "度(kwh)": "kWh", "立方公尺(m3)": "m3", "公噸(mt)": "t", "延噸公里(tkm)": "tkm", "毫升(ml)": "mL", "包": null, "個": null, "每房-每天": null };
+    for (const [declared, expected] of Object.entries(units)) {
+      expect((await cfpToFactor(record("X", "1", declared))).denominator_unit, declared).toBe(expected);
+    }
+  });
+
+  it("withdraws a record the source dropped, keeps it readable, and restores it if it returns", async () => {
+    const many = Array.from({ length: 10 }, (_, i) => record(`係數${i}`, "1"));
+    await syncCarbonFootprint(db, "k", respond(JSON.stringify(many)), NOW);
+    const dropped = await cfpToFactor(many[9]);
+    await syncCarbonFootprint(db, "k", respond(JSON.stringify(many.slice(0, 9))), NOW);
+    expect(await cfpCount()).toBe(9);
+    expect((await getFactor(db, dropped.id))!.status).toBe("withdrawn");
+    await syncCarbonFootprint(db, "k", respond(JSON.stringify(many)), NOW);
+    expect((await getFactor(db, dropped.id))!.status).toBe("current");
   });
 });

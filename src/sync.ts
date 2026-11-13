@@ -149,7 +149,14 @@ async function shortHash(text: string): Promise<string> {
   return [...new Uint8Array(digest)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function cfpToFactor(record: CfpRecord): Promise<Factor> {
+/** 來源沒有紀錄 ID；這四個欄位是最接近「同一筆係數」的鍵，但實測有十幾組相同而數值不同。 */
+const cfpIdentity = (r: CfpRecord) => [field(r, "name"), field(r, "unit"), field(r, "departmentname"), field(r, "announcementyear")].join("|");
+
+/**
+ * `ambiguous`：同一批資料裡有別的紀錄與它的名稱、單位、發布單位、公告年份完全相同而數值不同。
+ * 來源沒有提供區分依據，所以這種紀錄只供查詢。
+ */
+export async function cfpToFactor(record: CfpRecord, ambiguous = false): Promise<Factor> {
   const name = field(record, "name");
   const coe = field(record, "coe").replace(/,/g, "");
   const unit = field(record, "unit");
@@ -160,7 +167,9 @@ export async function cfpToFactor(record: CfpRecord): Promise<Factor> {
   const announcementYear = /^\d{4}$/.test(year) ? Number(year) : /^\d{2,3}$/.test(year) ? Number(year) + 1911 : null;
   const normalized = normalizeDeclaredUnit(unit);
   return {
-    id: `cfp-${await shortHash([name, unit, department, year].join("|"))}`,
+    // 數值也進雜湊：來源沒有 ID，而且有同名同單位同年份、數值不同的紀錄，只有加上數值才分得開。
+    // 代價是官方更正數值時，會表現為舊係數撤回、新係數出現，而不是同一筆係數的新版本。
+    id: `cfp-${await shortHash([name, unit, department, year, coe].join("|"))}`,
     source_id: "moenv-cfp",
     document_id: null,
     source_record_id: null,
@@ -187,11 +196,12 @@ export async function cfpToFactor(record: CfpRecord): Promise<Factor> {
     boundary_basis: null,
     methodology: "經環境部審查通過之碳足跡排放係數。",
     gwp_version: null,
-    calculability: normalized ? "direct" : "lookup_only",
+    calculability: normalized && !ambiguous ? "direct" : "lookup_only",
     usage_notes: [
       "這是產品碳足跡係數，不代表適合直接用於組織溫室氣體盤查，也不可與組織盤查的結果相加。",
       "「公告年份」不是係數的適用年度。",
-      ...(normalized ? [] : [`宣告單位「${unit}」無法對應到標準單位，僅供查詢。`]),
+      ...(normalized ? [] : [`宣告單位「${unit}」是以產品件數計或無法對應到標準單位，僅供查詢。`]),
+      ...(ambiguous ? ["官方資料中有其他紀錄與這筆的名稱、單位、發布單位、公告年份完全相同而數值不同，來源沒有提供區分依據，所以僅供查詢。"] : []),
     ],
     source_url: "https://data.moenv.gov.tw/dataset/detail/CFP_P_02",
     original: record,
@@ -211,20 +221,27 @@ export async function syncCarbonFootprint(db: D1Database, apiKey: string | undef
     }
     if (records.length === 0) throw new Error("環境部 API 回傳 0 筆，視為異常，不寫入。");
 
+    const seen = new Map<string, number>();
+    for (const r of records) seen.set(cfpIdentity(r), (seen.get(cfpIdentity(r)) ?? 0) + 1);
     const factors: Factor[] = [];
-    for (const r of records) factors.push(await cfpToFactor(r));
+    for (const r of records) factors.push(await cfpToFactor(r, seen.get(cfpIdentity(r))! > 1));
     const ids = new Set(factors.map((f) => f.id));
     if (ids.size !== factors.length) {
-      throw new Error(`有 ${factors.length - ids.size} 筆紀錄的名稱、單位、發布單位、公告年份完全相同，無法給出穩定的係數 ID；整批不寫入，需人工確認紀錄的唯一性。`);
+      throw new Error(`有 ${factors.length - ids.size} 筆紀錄的所有欄位完全相同，視為來源異常；整批不寫入。`);
     }
 
-    const before = await db.prepare("SELECT count(*) AS n FROM emission_factors WHERE source_id = 'moenv-cfp'").first<{ n: number }>();
+    const before = await db.prepare("SELECT count(*) AS n FROM emission_factors WHERE source_id = 'moenv-cfp' AND status = 'current'").first<{ n: number }>();
     const previous = before?.n ?? 0;
     if (previous > 0 && factors.length < previous * (1 - CFP_MAX_DROP)) {
       throw new Error(`筆數從 ${previous} 降到 ${factors.length}，降幅超過 ${CFP_MAX_DROP * 100}%，視為異常，不寫入。`);
     }
 
     const r = await upsertFactors(db, factors, "環境部 CFP_P_02 同步", now());
+    // 來源已移除的紀錄標為撤回，不刪除：用過它的計算仍可用 factor_id 加版本重現。重新出現的會恢復。
+    await db
+      .prepare("UPDATE emission_factors SET status = CASE WHEN id IN (SELECT value FROM json_each(?)) THEN 'current' ELSE 'withdrawn' END WHERE source_id = 'moenv-cfp'")
+      .bind(JSON.stringify([...ids]))
+      .run();
     await db.prepare("UPDATE data_sources SET status = 'active' WHERE id = 'moenv-cfp'").run();
     return { status: "success", records_ok: factors.length, records_changed: r.inserted + r.updated };
   }, apiKey ? [apiKey] : []);

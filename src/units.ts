@@ -4,7 +4,7 @@
  */
 import Big from "big.js";
 
-export type Dimension = "energy" | "volume" | "mass" | "count" | "distance" | "heat";
+export type Dimension = "energy" | "volume" | "mass" | "count" | "distance" | "heat" | "length" | "area" | "freight" | "passenger";
 
 interface UnitDef {
   dimension: Dimension;
@@ -16,6 +16,7 @@ interface UnitDef {
 const UNITS: Record<string, UnitDef> = {
   kWh: { dimension: "energy", toBase: "1" },
   MWh: { dimension: "energy", toBase: "1000" },
+  mL: { dimension: "volume", toBase: "0.001" },
   L: { dimension: "volume", toBase: "1" },
   kL: { dimension: "volume", toBase: "1000" },
   m3: { dimension: "volume", toBase: "1000" },
@@ -26,6 +27,10 @@ const UNITS: Record<string, UnitDef> = {
   piece: { dimension: "count", toBase: "1" },
   km: { dimension: "distance", toBase: "1" },
   TJ: { dimension: "heat", toBase: "1" },
+  m: { dimension: "length", toBase: "1" },
+  m2: { dimension: "area", toBase: "1" },
+  tkm: { dimension: "freight", toBase: "1" },
+  pkm: { dimension: "passenger", toBase: "1" },
 };
 
 /** 使用者可能寫的各種寫法 → 標準單位。鍵一律小寫、去空白。「度」不在這裡：它在電是 kWh、在水是 m³。 */
@@ -42,6 +47,12 @@ const SPELLINGS: Record<string, string> = {
   "件": "piece", piece: "piece", pcs: "piece", "個": "piece",
   km: "km", "公里": "km",
   tj: "TJ", "兆焦耳": "TJ",
+  ml: "mL", "毫升": "mL",
+  mt: "t",
+  m: "m", "公尺": "m",
+  m2: "m2", "m²": "m2", "平方公尺": "m2",
+  tkm: "tkm", "延噸公里": "tkm",
+  pkm: "pkm", "延人公里": "pkm",
 };
 
 export class UnitError extends Error {
@@ -89,8 +100,14 @@ export function convert(quantity: Big, from: string, to: string): Big {
   return quantity.times(ratio);
 }
 
-/** 官方 CSV/JSON 裡的宣告單位 → 標準單位；無法辨識回 null（這種係數只供查詢）。 */
+/**
+ * 官方資料裡的宣告單位 → 標準單位；無法辨識回 null（這種係數只供查詢）。
+ * 環境部的寫法是「公斤(kg)」「度(kwh)」：括號裡的縮寫比中文明確（「度」單獨出現時有歧義），所以先看括號。
+ * 「個」「件」這類計數單位一律回 null：每件產品的碳足跡只對那個產品有意義，不能當成通用的「件」。
+ */
 export function normalizeDeclaredUnit(declared: string): string | null {
-  const key = declared.trim().toLowerCase().replace(/\s+/g, "");
-  return SPELLINGS[key] ?? null;
+  const text = declared.trim().toLowerCase().replace(/\s+/g, "");
+  const abbr = /[(（]([^)）]+)[)）]$/.exec(text)?.[1];
+  const unit = (abbr && SPELLINGS[abbr]) ?? SPELLINGS[text] ?? null;
+  return unit && UNITS[unit].dimension !== "count" ? unit : null;
 }

@@ -125,7 +125,7 @@ const ZH: Copy = {
     toolsCols: ["工具", "用途"],
     srcCols: ["提供機關", "資料集", "授權", "匯入狀態"],
     licenseUnknown: "未能在官方頁面確認",
-    sourceStatus: { active: "已匯入", pending_key: "尚未匯入（需設定 API 金鑰）", pending_verification: "尚未匯入（待查證）" },
+    sourceStatus: { active: "已匯入", pending_key: "透過 API 同步（即時狀態見 /api/v1/status）", pending_verification: "尚未匯入（待查證）" },
     navLabel: "頁面導覽",
     langLabel: "語言",
     stepsLabel: "步驟",
@@ -161,8 +161,8 @@ const ZH: Copy = {
       text: "環境部 113 年 2 月 5 日公告的溫室氣體排放係數，單位是 kg/TJ，依氣體（CO2、CH4、N2O）分列。官方沒有每公升的係數，計算時必須由你提供燃料的低位熱值。目前只匯入常用燃料。",
     },
     {
-      title: "產品碳足跡（尚未匯入）",
-      text: "環境部碳足跡排放係數資料集（CFP_P_02）目前還沒有匯入任何資料，所以現在查不到產品的碳足跡係數。",
+      title: "產品碳足跡",
+      text: "環境部碳足跡排放係數資料集（CFP_P_02），一千多筆，透過 API 同步。這是產品生命週期碳足跡，不可直接用於組織溫室氣體盤查。以包、瓶、片等件數計的係數，以及官方資料中無法區分的同名紀錄，僅供查詢、不提供計算。",
     },
   ],
   coverageNote: "以上是目前實際收錄的範圍。查詢超出範圍時，服務會回覆查不到，不會推測。",
@@ -257,7 +257,7 @@ const EN: Copy = {
     toolsCols: ["Tool", "What it does"],
     srcCols: ["Organization", "Dataset", "Licence", "Import status"],
     licenseUnknown: "Not confirmed on the official page",
-    sourceStatus: { active: "Imported", pending_key: "Not yet imported (API key needed)", pending_verification: "Not yet imported (pending verification)" },
+    sourceStatus: { active: "Imported", pending_key: "Synced by API (live status at /api/v1/status)", pending_verification: "Not yet imported (pending verification)" },
     navLabel: "Page navigation",
     langLabel: "Language",
     stepsLabel: "Steps",
@@ -293,8 +293,8 @@ const EN: Copy = {
       text: "Greenhouse gas emission factors announced by the Ministry of Environment on 5 February 2024 (ROC year 113), in kg/TJ and split by gas (CO2, CH4, N2O). There is no official per-litre factor, so you must supply the fuel's lower heating value. Only common fuels are imported so far.",
     },
     {
-      title: "Product carbon footprint (not yet imported)",
-      text: "The Ministry of Environment's carbon footprint factor dataset (CFP_P_02) has no data imported yet, so product carbon footprint factors cannot be looked up today.",
+      title: "Product carbon footprint",
+      text: "The Ministry of Environment's carbon footprint factor dataset (CFP_P_02), over a thousand records, synced by API. These are product life-cycle footprints and must not be used directly for an organisational GHG inventory. Factors declared per item (pack, bottle, sheet) and same-name records the official data does not tell apart are lookup-only, not calculable.",
     },
   ],
   coverageNote: "This is what is actually imported today. For anything outside it, the service answers that nothing was found rather than guessing.",
@@ -390,7 +390,7 @@ const JA: Copy = {
     toolsCols: ["ツール", "用途"],
     srcCols: ["提供機関", "データセット", "ライセンス", "取り込み状況"],
     licenseUnknown: "公式ページでは確認できていません",
-    sourceStatus: { active: "取り込み済み", pending_key: "未取り込み（APIキーが必要）", pending_verification: "未取り込み（確認待ち）" },
+    sourceStatus: { active: "取り込み済み", pending_key: "APIで同期（最新の状態は /api/v1/status）", pending_verification: "未取り込み（確認待ち）" },
     navLabel: "ページ内ナビゲーション",
     langLabel: "言語",
     stepsLabel: "手順",
@@ -426,8 +426,8 @@ const JA: Copy = {
       text: "環境部が2024年2月5日（民国113年）に公告した温室効果ガス排出係数です。単位はkg/TJで、ガス（CO2、CH4、N2O）ごとに分かれています。公式にはリットル当たりの係数がないため、燃料の低位発熱量をご自身で指定する必要があります。取り込み済みなのは、一般的な燃料のみです。",
     },
     {
-      title: "製品のカーボンフットプリント（未取り込み）",
-      text: "環境部のカーボンフットプリント係数データセット（CFP_P_02）は、まだデータを取り込んでいません。そのため現時点では製品のカーボンフットプリント係数は調べられません。",
+      title: "製品のカーボンフットプリント",
+      text: "環境部のカーボンフットプリント係数データセット（CFP_P_02）、千件あまりをAPIで同期しています。製品のライフサイクル全体の値であり、組織の温室効果ガス算定にそのまま使うことはできません。包・本・枚など個数単位の係数と、公式データ上で区別できない同名の記録は、参照のみで計算には使えません。",
     },
   ],
   coverageNote: "ここに書いたのが、現在実際に取り込んでいる範囲です。範囲外の質問には、推測せず見つからないと答えます。",
@@ -1034,17 +1034,17 @@ const toolLines = (): string =>
 
 const sourceLines = (): string =>
   SOURCES.map((s) => {
-    const st = s.status === "active" ? "imported / 已匯入" : "not yet imported / 尚未匯入";
+    const st = s.status === "active" ? "imported / 已匯入" : "synced by API, live status at /api/v1/status / 透過 API 同步，即時狀態見 /api/v1/status";
     return `- ${s.organization} ${s.dataset_name} (${st}): ${s.official_url}`;
   }).join("\n");
 
-const LIMITS = `- Coverage today: electricity (2005-2025), tap water, and fuel combustion (Ministry of Environment announcement of 5 Feb 2024, kg/TJ). Product carbon footprint factors (CFP_P_02) are NOT yet imported.
+const LIMITS = `- Coverage today: electricity (2005-2025), tap water, and fuel combustion (Ministry of Environment announcement of 5 Feb 2024, kg/TJ). Product carbon footprint factors (CFP_P_02) are synced by API; they are life-cycle footprints, not organisational inventory factors, and per-item ones are lookup-only.
 - Fuel calculations need a user-supplied lower heating value; there is no official per-litre factor and the service never assumes one.
 - For 2025 there are three electricity values (0.466 industry inventory, 0.471 non-commercial lighting and flat-rate lighting customers, 0.467 public utility average, kgCO2e/kWh).
 - Taiwan Water Corporation values are CO2 and Taipei Water Department values are CO2e; they must not be added.
 - If a factor is not found, the service says so. It never fabricates or substitutes another year.
 - Results are for reference only: not a certified GHG inventory, third-party verification or legal-compliance guarantee.
-- 目前涵蓋：電力（2005-2025）、自來水、燃料燃燒（環境部 113 年 2 月 5 日公告，kg/TJ）。產品碳足跡係數（CFP_P_02）尚未匯入。
+- 目前涵蓋：電力（2005-2025）、自來水、燃料燃燒（環境部 113 年 2 月 5 日公告，kg/TJ）。產品碳足跡係數（CFP_P_02）透過 API 同步；它是產品生命週期碳足跡，不是組織盤查係數，以件數計的僅供查詢。
 - 燃料計算需要使用者提供低位熱值；官方沒有每公升係數，服務不會自行假設。
 - 查不到就明說查不到，不編造數字，也不以其他年度代替。結果僅供參考，不是認證、第三方查證或法令遵循的依據。`;
 
