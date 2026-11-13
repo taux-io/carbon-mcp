@@ -1,20 +1,20 @@
 # 交接紀錄
 
-寫於 2026-11-13，0.2.3 發布之後；狀態表已更新到 `/terms` 上線之後。這份文件記錄這一輪做了什麼、目前的狀態、以及接下來可以做的事。專案的規則與架構在 `CLAUDE.md`，部署與發版流程在 `docs/deployment.md`，這裡不重複。
+寫於 2026-11-13，0.2.3 發布之後；狀態表已更新到 0.2.6 發布之後。這份文件記錄這一輪做了什麼、目前的狀態、以及接下來可以做的事。專案的規則與架構在 `CLAUDE.md`，部署與發版流程在 `docs/deployment.md`，這裡不重複。
 
 ## 目前狀態
 
 | 項目 | 狀態 |
 |---|---|
-| 正式環境 | `https://carbon.taux.io`，`/health` 回報 0.2.5，資料庫正常 |
-| 分支 | `main`，本機與 `origin/main` 相同。正式環境跑的是 `76aa7b7`（0.2.5 加上 `/terms` 與準據法段落，沒有升版），之後的 commit 只改文件 |
-| Tag | `v0.2.5` 已推送 |
-| 官方 MCP Registry | `io.github.taux-io/carbon-mcp` 最新版本 0.2.5（2026-11-13 發布，狀態 active） |
+| 正式環境 | `https://carbon.taux.io`，`/health` 回報 0.2.6，資料庫正常 |
+| 分支 | `main`，本機與 `origin/main` 相同。正式環境跑的是 `fea4cd8`（0.2.6），之後的 commit 只改文件 |
+| Tag | `v0.2.6` 已推送 |
+| 官方 MCP Registry | `io.github.taux-io/carbon-mcp` 最新版本 0.2.6（2026-11-14 台灣時間發布，狀態 active） |
 | 服務條款 | `https://carbon.taux.io/terms` 已上線（2026-11-13），每一頁頁尾都有連結，sitemap 有收錄 |
 | 含氟氣體係數 | 46 筆都是版本 3（使用限制列出四個接受 `refrigerant_blend` 的工具）；版本 1、2 保留在 `factor_versions` |
 | 排程 | `30 19 * * *`（台灣時間 03:30），只有這一條 |
 | 測試 | 8 個檔案、243 項通過；`main` 的 CI 通過 |
-| 每日檢查 | smoke 25 項（含 `/terms`）；2026-11-13 加入 `/terms` 後手動觸發一次，通過；沒有未關閉的 `production-check` issue |
+| 每日檢查 | smoke 25 項（含 `/terms`）；0.2.6 部署後手動觸發一次，通過；沒有未關閉的 `production-check` issue |
 
 ## 這一輪做了什麼
 
