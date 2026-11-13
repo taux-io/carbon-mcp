@@ -980,6 +980,12 @@ const ROUTES: Route[] = [
     params: `JSON：{ "items": [...] }，每筆同 /api/v1/calculate，最多 ${MAX_BATCH} 筆`,
   },
   { method: "GET", path: "/api/v1/match", summary: "把活動或會計科目的描述對到候選係數，附單位相容性與適用條件，供確認後再計算。", params: "description（必填）、unit、year、limit" },
+  {
+    method: "POST",
+    path: "/api/v1/inventory",
+    summary: "計算多筆活動並依範疇一、二、三彙整成清冊，附各範疇小計與範疇一加二合計。",
+    params: `JSON：{ "inventory_year"?: 2025, "items": [...] }，每筆同 /api/v1/calculate，另可帶 label 與 scope（1、2、3），最多 ${MAX_BATCH} 筆`,
+  },
   { method: "GET", path: "/api/v1/status", summary: "各來源的同步狀態。", params: "無" },
   { method: "GET", path: "/health", summary: "服務健康檢查。", params: "無" },
 ];

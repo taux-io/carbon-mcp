@@ -7,8 +7,9 @@ import { z } from "zod";
 import {
   calculateBatch, calculateOne, electricity, factorDetail, factorVersions, listDataSources, search, updateStatus,
 } from "./service";
+import { buildInventory } from "./inventory";
 import { matchActivity } from "./match";
-import { batchShape, calcSchema, electricityShape, matchShape, searchShape } from "./tools";
+import { batchShape, calcSchema, electricityShape, inventoryShape, matchShape, searchShape, toInventoryItem } from "./tools";
 
 /** 瀏覽器端的跨來源呼叫只開給自己的網站與本機開發；伺服器對伺服器的呼叫不受 CORS 影響。 */
 const ALLOWED_ORIGINS = new Set(["https://carbon.taux.io", "http://localhost:8787", "http://127.0.0.1:8787"]);
@@ -147,7 +148,14 @@ async function route(request: Request, url: URL, db: D1Database, now: Date): Pro
     return isFailure(p) ? p : calculateBatch(db, p.items.map(toRequest), now);
   }
 
-  const known = ["/api/v1/sources", "/api/v1/status", "/api/v1/factors", "/api/v1/electricity", "/api/v1/match", "/api/v1/calculate", "/api/v1/calculate/batch"];
+  if (path === "/api/v1/inventory" && post) {
+    const body = await jsonBody(request);
+    if (isFailure(body)) return body;
+    const p = parse(z.object(inventoryShape), body);
+    return isFailure(p) ? p : buildInventory(db, p.items.map(toInventoryItem), p.inventory_year, now);
+  }
+
+  const known = ["/api/v1/sources", "/api/v1/status", "/api/v1/factors", "/api/v1/electricity", "/api/v1/match", "/api/v1/calculate", "/api/v1/calculate/batch", "/api/v1/inventory"];
   if (known.includes(path) || one) return failure("method_not_allowed", "這個路徑不支援此 HTTP 方法。");
   return failure("not_found", "沒有這個 API 路徑。文件見 /api/docs。");
 }

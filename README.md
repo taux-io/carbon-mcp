@@ -37,9 +37,11 @@ claude mcp add --transport http carbon https://carbon.taux.io/mcp
 
 ## MCP 工具
 
-`ping`、`list_data_sources`、`search_emission_factors`、`match_activity`、`get_emission_factor`、`get_electricity_factor`、`calculate_emissions`、`calculate_batch`、`compare_emissions`、`list_factor_versions`、`check_factor_updates`、`get_methodology`。
+`ping`、`list_data_sources`、`search_emission_factors`、`match_activity`、`get_emission_factor`、`get_electricity_factor`、`calculate_emissions`、`calculate_batch`、`build_inventory`、`compare_emissions`、`list_factor_versions`、`check_factor_updates`、`get_methodology`。
 
 定義在 [`src/tools.ts`](src/tools.ts)；參數說明在 `/tools`。
+
+要把多筆活動整理成盤查清冊的樣子，用 `build_inventory`（REST：`POST /api/v1/inventory`）。它依範疇一、二、三分類，給各範疇小計、範疇一依氣體分列，以及範疇一加二的合計。會誤導的數字不給：混用 CO2 與 CO2e、有項目算不出來、或範疇三含產品碳足跡時，對應的小計或合計會附原因扣住。範疇分類是依係數類型的預設，可逐筆用 `scope` 覆寫。它只涵蓋你提供的活動，不是完整的盤查。
 
 使用者的說法不是官方係數名稱時（「10 月電費」「塑膠原料採購」），用 `match_activity`：它回傳候選係數、單位是否相容、適用條件與待確認事項，不會代為選定。ERP 串接時可用它把會計科目對到係數，由人確認後把 `factor_id` 存起來重複使用。
 
@@ -56,6 +58,7 @@ GET  /api/v1/electricity?year=&usage_type=
 GET  /api/v1/match?description=&unit=&year=&limit=
 POST /api/v1/calculate
 POST /api/v1/calculate/batch
+POST /api/v1/inventory
 GET  /api/v1/status
 GET  /health
 ```
@@ -94,7 +97,7 @@ npm run dry-run                       # 確認 Worker 能 bundle
 
 2026-11-13 在開發機上的結果：
 
-- `npm test`：6 個檔案、156 項測試全部通過。
+- `npm test`：7 個檔案、170 項測試全部通過。
 - `npm run typecheck`、`npm run dry-run`：通過。
 - `npm run smoke`（本機 `wrangler dev` 與本機 D1）：19 項檢查全部通過，包含兩個 MCP 協定版本的 `initialize`、`tools/list`、`tools/call`，以及 REST 計算。12,000 kWh 的 2025 年產業用電算出 5,592 kgCO2e，係數 0.466 讀自資料庫。
 - 同一次排程向能源署開放資料 CSV 做了真實的交叉檢查：CSV 的 21 個年度與已審核資料一致。

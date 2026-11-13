@@ -67,11 +67,11 @@ describe.each<Era>(["legacy", "modern"])("MCP (%s protocol)", (era) => {
     });
   }
 
-  it("lists all twelve tools as read-only, each with an input schema", async () => {
+  it("lists all thirteen tools as read-only, each with an input schema", async () => {
     const r = await rpc("tools/list");
     const tools = r.result.tools as { name: string; inputSchema: unknown; annotations: { readOnlyHint: boolean } }[];
     expect(tools.map((t) => t.name).sort()).toEqual(TOOLS.map((t) => t.name).sort());
-    expect(tools.length).toBe(12);
+    expect(tools.length).toBe(13);
     expect(tools.every((t) => t.annotations.readOnlyHint && t.inputSchema)).toBe(true);
   });
 

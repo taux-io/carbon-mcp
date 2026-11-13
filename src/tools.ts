@@ -11,6 +11,7 @@ import {
   calculateBatch, calculateOne, compareEmissions, electricity, factorDetail, factorVersions, listDataSources,
   MAX_BATCH, methodology, METHODOLOGY_TOPICS, ping, search, updateStatus, USAGE_TYPES,
 } from "./service";
+import { buildInventory } from "./inventory";
 import { matchActivity, MAX_CANDIDATES } from "./match";
 import { MAX_LIMIT } from "./store";
 
@@ -77,6 +78,18 @@ export const electricityShape = {
 export const batchShape = {
   items: z.array(calcSchema).min(1).max(MAX_BATCH).describe(`要計算的活動，最多 ${MAX_BATCH} 筆。`),
 };
+
+export const inventoryItemSchema = calcSchema.extend({
+  label: z.string().max(80).optional().describe("這筆活動的名稱，例如「總公司電費」。只用來讓清冊好讀。"),
+  scope: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional().describe("覆寫預設的範疇分類（1、2 或 3）。組織邊界使某筆活動不屬於預設範疇時使用。"),
+});
+
+export const inventoryShape = {
+  inventory_year: z.number().int().min(1990).max(2100).optional().describe("盤查年度（西元）。會套用到沒有自己指定 year 的項目，係數年度不符的項目會回報錯誤。"),
+  items: z.array(inventoryItemSchema).min(1).max(MAX_BATCH).describe(`要列入清冊的活動，最多 ${MAX_BATCH} 筆。`),
+};
+
+export const toInventoryItem = (a: z.infer<typeof inventoryItemSchema>) => ({ ...toRequest(a), label: a.label, scope: a.scope });
 
 export const compareShape = {
   baseline: calcSchema.describe("基準（例如去年）。"),
@@ -177,6 +190,15 @@ export const TOOLS: ToolDef[] = [
     summary: { zh: "批次計算多筆活動，條件相容時才給合計。", en: "Calculate several activities; totals only when compatible.", ja: "複数の活動を一括計算します。条件が揃う場合のみ合計を返します。" },
     shape: batchShape,
     run: (a, { db, now }) => calculateBatch(db, a.items.map(toRequest), now),
+  }),
+  def({
+    name: "build_inventory",
+    title: "Build GHG inventory summary",
+    description:
+      "Calculate several activities and arrange the results as a greenhouse gas inventory: grouped into Scope 1 (direct), Scope 2 (purchased energy) and Scope 3 (other indirect), with a subtotal per scope, Scope 1 by gas, and a Scope 1+2 total. Subtotals and totals are withheld, with the reason, when items mix CO2 and CO2e, when an item could not be calculated, or when Scope 3 holds product carbon footprints that may overlap Scopes 1 and 2. The scope assignment is this service's default by factor type and can be overridden per item. Covers only the activities supplied; it is not a complete or verified inventory. 計算多筆活動並整理成溫室氣體盤查清冊的形式：分為範疇一（直接排放）、範疇二（能源間接）、範疇三（其他間接），提供各範疇小計、範疇一依氣體分列，以及範疇一加二的合計。項目混用 CO2 與 CO2e、有項目算不出來、或範疇三含可能與範疇一、二重疊的產品碳足跡時，不提供對應的小計或合計並說明原因。範疇分類是本服務依係數類型的預設，可逐筆覆寫。只涵蓋你提供的活動，不是完整或經查證的盤查。",
+    summary: { zh: "計算多筆活動並依範疇一、二、三彙整成清冊。", en: "Calculate activities and summarise them by Scope 1, 2 and 3.", ja: "複数の活動を計算し、スコープ1・2・3別に集計します。" },
+    shape: inventoryShape,
+    run: (a, { db, now }) => buildInventory(db, a.items.map(toInventoryItem), a.inventory_year, now),
   }),
   def({
     name: "compare_emissions",

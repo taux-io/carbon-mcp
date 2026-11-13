@@ -34,6 +34,7 @@ npm run check-concepts                     # 檢查用詞對照表的每個字�
 - `src/tools.ts`：11 個 MCP 工具的定義表（名稱、說明、zod 參數）。MCP 註冊、REST 的參數驗證、網站的工具說明與 `llms.txt` 都從這一份產生。
 - `src/service.ts`：MCP 與 REST 共用的唯一一套查詢與計算流程。新功能加在這裡，再由 `tools.ts` 與 `api.ts` 各接一個薄殼。
 - `src/match.ts`、`src/concepts.ts`：科目對照。`concepts.ts` 是本服務整理的用詞對照表（「塑膠原料」→ 名稱含「聚丙烯」…的係數），`match.ts` 用它找候選、檢查單位、列出待確認事項。它只找候選，不選定係數。改對照表後用 `npm run check-concepts -- <baseUrl>` 確認每個字在真實資料裡都找得到係數。
+- `src/inventory.ts`：盤查清冊彙整。把多筆計算結果依範疇一、二、三分類並小計。`SCOPE_OF` 是係數類型對範疇的預設分類表；小計與合計在會誤導時扣住並說明原因（規則寫在檔案開頭）。
 - `src/engine.ts`、`src/units.ts`：純函式的計算引擎與單位換算，不碰資料庫與網路。
 - `src/store.ts`：D1 存取。上半部是寫入（只有排程會呼叫），下半部是查詢。
 - `src/sync.ts`：排程工作。
