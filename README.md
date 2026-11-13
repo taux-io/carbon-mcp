@@ -104,7 +104,7 @@ npm run dry-run                       # 確認 Worker 能 bundle
 - 同一次排程向能源署開放資料 CSV 做了真實的交叉檢查：CSV 的 21 個年度與已審核資料一致。
 - 引擎重現了環境部《溫室氣體排放量盤查作業指引 113 年版》的柴油與天然氣算例，各氣體到小數第四位相符。
 - 以環境部會員金鑰在本機做了真實的 `CFP_P_02` 同步：1,188 筆全部匯入，金鑰沒有出現在狀態端點或日誌。
-- 正式環境：`npm run smoke -- https://carbon.taux.io` 24 項檢查全部通過。第一次排程從 Cloudflare 連上了能源署與環境部，交叉檢查一致，`CFP_P_02` 同步 1,188 筆。
+- 正式環境：`npm run smoke -- https://carbon.taux.io` 目前 25 項（2026-11-13）檢查全部通過。第一次排程從 Cloudflare 連上了能源署與環境部，交叉檢查一致，`CFP_P_02` 同步 1,188 筆。
 - 透過 claude.ai 的 MCP 連接器對正式環境實際呼叫工具：三個示範問句共六次呼叫，結果與預期一致，包含冷媒缺少計算依據時回 `missing_refrigerant_basis`。紀錄在 [`docs/claude-directory-submission.md`](docs/claude-directory-submission.md) 的「連接器實測紀錄」。
 - 限流有兩層，都實測過：zone 的 WAF 規則擋平行洪水（平行 300 次中 193 次得到 429），Worker 內的限流擋單一連線的失控迴圈。WAF 規則與 `twse-mcp` 共用計數。見 [`docs/deployment.md`](docs/deployment.md) 的「限流」。
 - 網站已用無頭 Chrome 檢查三個語系、手機與桌面寬度、深淺色共 12 種組合（無水平捲動、對比足夠），並目視看過截圖。
