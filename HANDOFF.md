@@ -18,7 +18,7 @@
 
 ## 這一輪做了什麼
 
-依時間順序，每一項都已上線。
+依時間順序。除了第 9 項已撤銷，其餘都已上線。
 
 1. **示範問句的連接器實測**（`60d4f8e`）。透過 claude.ai 的連接器對正式環境跑了送件文件的三個示範問句，共六次工具呼叫，結果記在 `docs/claude-directory-submission.md` 第 6 節。示範三有兩種錯誤：完全沒說數量依據是 `missing_refrigerant_basis`，說了是填充量但沒給逸散率是 `invalid_leak_rate`。
 2. **sitemap 在瀏覽器裡顯示成 XML 樹**（`17f1e5f`）。原本 Chrome 把它顯示成一行文字，因為裡面的 `<xhtml:link>` 屬於 XHTML 命名空間。已移除；語系宣告留在各頁的 `<head>`。
