@@ -10,23 +10,13 @@ name: publish to mcp registry
 # 沒有這道閘門，一個被盜的 write 權限帳號打一個 tag，就能把 server.json 的 remotes[0].url 改掉，
 # 所有從 registry 安裝的人跟著改連線目標。發布後可用 `npm run check-registry` 比對線上條目。
 #
-# Registry 成功後，第二個 job 在 Smithery（taux/carbon）重新發布，讓它重新掃描工具。
-# 那一步用長期的 SMITHERY_API_KEY，存在 `mcp-registry` 的 environment secret 裡。
-#
 # 發版步驟見 docs/deployment.md 的「發版與送件」。
 
 on:
   push:
     tags: ["v*"]
   # 手動重發：registry 標示為 preview，官方明說可能有資料重置，屆時不必為了重發硬打一個新 tag。
-  # smithery_only：只重跑 Smithery（例如改了 .github/smithery.json）。同一個版本不能在 registry 重發，
-  # 那一步會失敗而把 Smithery 擋掉。environment 只允許 `v*` tag，所以要在 tag 上觸發。
   workflow_dispatch:
-    inputs:
-      smithery_only:
-        description: "只更新 Smithery（不發布到 registry）"
-        type: boolean
-        default: false
 
 concurrency:
   group: publish-mcp
@@ -36,7 +26,6 @@ permissions: {}
 
 jobs:
   publish:
-    if: ${{ !inputs.smithery_only }}
     runs-on: ubuntu-latest
     environment: mcp-registry
     permissions:
@@ -75,37 +64,3 @@ jobs:
 
       - name: publish
         run: ./mcp-publisher publish
-
-  # 獨立的 job：上面的 job 握有 id-token: write，同一個 job 裡的程式都換得到改寫 registry 條目的憑證，
-  # 第三方的 smithery CLI 不該和它待在一起。這裡只拿得到 SMITHERY_API_KEY，而它是長期金鑰，
-  # 所以 action 釘到 commit SHA，CLI 由 .github/smithery-cli 的 lockfile 鎖住整棵相依樹，
-  # 用 `npm ci --ignore-scripts` 安裝。同一個 environment：金鑰只在核准後才讀得到。
-  smithery:
-    needs: publish
-    # publish 被 smithery_only 跳過時照樣跑；publish 失敗時不跑。
-    if: ${{ always() && (needs.publish.result == 'success' || inputs.smithery_only) }}
-    runs-on: ubuntu-latest
-    environment: mcp-registry
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: "22"
-      - name: install smithery CLI
-        working-directory: .github/smithery-cli
-        run: npm ci --ignore-scripts
-      - name: publish to Smithery
-        env:
-          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
-        run: .github/smithery-cli/node_modules/.bin/smithery mcp publish https://carbon.taux.io/mcp -n taux/carbon
-      # 顯示名稱與說明只在 .github/smithery.json 維護，每次發布都同步過去，網頁上改的會被覆蓋。
-      - name: sync Smithery listing metadata
-        env:
-          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
-        run: |
-          curl -fsS -X PATCH "https://api.smithery.ai/servers/taux%2Fcarbon" \
-            -H "Authorization: Bearer ${SMITHERY_API_KEY}" \
-            -H "Content-Type: application/json" \
-            --data @.github/smithery.json -o /dev/null -w "HTTP %{http_code}\n"
