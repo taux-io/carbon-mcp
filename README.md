@@ -6,11 +6,11 @@
 
 這是 taux.io 的**非官方**公共資料服務，不是政府網站，與資料提供機關沒有隸屬關係。計算結果僅供參考，不構成碳盤查認證、第三方查證或法定合規保證。
 
-**目前狀態：可在本機完整執行，尚未部署。** `https://carbon.taux.io` 還沒有上線。
+**目前狀態：已部署在 `https://carbon.taux.io`。**
 
 ## 連線
 
-端點（部署後）：`https://carbon.taux.io/mcp`。Streamable HTTP，不需註冊、不需 API Key，唯讀。
+端點：`https://carbon.taux.io/mcp`。Streamable HTTP，不需註冊、不需 API Key，唯讀。
 
 ```bash
 claude mcp add --transport http carbon https://carbon.taux.io/mcp
@@ -91,16 +91,17 @@ npm run dry-run                       # 確認 Worker 能 bundle
 
 2026-11-13 在開發機上的結果：
 
-- `npm test`：5 個檔案、130 項測試全部通過。
+- `npm test`：5 個檔案、137 項測試全部通過。
 - `npm run typecheck`、`npm run dry-run`：通過。
 - `npm run smoke`（本機 `wrangler dev` 與本機 D1）：19 項檢查全部通過，包含兩個 MCP 協定版本的 `initialize`、`tools/list`、`tools/call`，以及 REST 計算。12,000 kWh 的 2025 年產業用電算出 5,592 kgCO2e，係數 0.466 讀自資料庫。
 - 同一次排程向能源署開放資料 CSV 做了真實的交叉檢查：CSV 的 21 個年度與已審核資料一致。
 - 引擎重現了環境部《溫室氣體排放量盤查作業指引 113 年版》的柴油與天然氣算例，各氣體到小數第四位相符。
 - 以環境部會員金鑰在本機做了真實的 `CFP_P_02` 同步：1,188 筆全部匯入，金鑰沒有出現在狀態端點或日誌。
+- 正式環境：`npm run smoke -- https://carbon.taux.io` 19 項檢查全部通過。第一次排程從 Cloudflare 連上了能源署與環境部，交叉檢查一致，`CFP_P_02` 同步 1,188 筆。
 
 沒有驗證的事：
 
-- 沒有部署，所以正式網域、Custom Domain、Cron、限流綁定、以及從 Cloudflare 連政府網站是否會被擋，都沒有驗證。
+- 限流綁定沒有實際送超過上限的請求驗證。
 - 網站沒有在瀏覽器中目視檢查（手機版、深色模式、無障礙），只有自動化測試檢查結構。
 - 沒有用實際的 MCP 客戶端（Claude、Cursor 等）連線測試。
 
@@ -117,7 +118,6 @@ npm run dry-run                       # 確認 Worker 能 bundle
 
 未完成或待驗證：
 
-- **部署。** 資源清單與步驟在 [`docs/deployment.md`](docs/deployment.md)，需確認後執行。
 - **產品碳足跡的搜尋只比對官方名稱。** 查「塑膠原料」找不到「聚丙烯」，沒有同義詞對照。以包、瓶、片等件數計的係數（例如衛生紙）只能查、不能算。
 - 用水以外的擴充來源（運輸、廢棄物）：沒有找到邊界明確的官方結構化係數，未收錄。
 - 環境部公告中的其餘燃料、製程與逸散係數。

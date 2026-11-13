@@ -252,6 +252,44 @@ describe("REST API", () => {
   });
 });
 
+// 正式環境第一次部署後、排程還沒跑之前就是這個狀態。
+describe("before any data has been loaded", () => {
+  const empty = () => ({ DB: createTestDb() });
+  const callEmpty = async (name: string, args: Record<string, unknown>) => {
+    const res = await send(mcpRequest("legacy", "tools/call", { name, arguments: args }), empty());
+    const payload = await readPayload(res);
+    return { isError: payload.result.isError === true, data: JSON.parse(payload.result.content[0].text) };
+  };
+
+  it.each([
+    ["get_electricity_factor", { year: 2025 }],
+    ["search_emission_factors", { query: "電力" }],
+    ["get_emission_factor", { factor_id: "tw-electricity-2025-industry-inventory" }],
+    ["calculate_emissions", { factor_id: "tw-electricity-2025-industry-inventory", quantity: 1, quantity_unit: "kWh" }],
+    ["list_factor_versions", { factor_id: "tw-electricity-2025-industry-inventory" }],
+  ])("%s says the service has no data yet, not that the government has not published", async (name, args) => {
+    const { isError, data } = await callEmpty(name, args);
+    expect(isError).toBe(true);
+    expect(data.error.code).toBe("data_not_loaded");
+    expect(data.error.message).toContain("資料尚未載入");
+    expect(JSON.stringify(data)).not.toContain("尚未公布");
+  });
+
+  it("answers 503 over REST", async () => {
+    const res = await send(new Request("https://carbon.taux.io/api/v1/electricity?year=2025"), empty());
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("data_not_loaded");
+  });
+});
+
+describe("with data loaded", () => {
+  it("still reports a genuinely unpublished year as not found", async () => {
+    const res = await get("/api/v1/electricity?year=2026");
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("no_factor_for_year");
+  });
+});
+
 describe("site routes", () => {
   it("reports health with the database state", async () => {
     const res = await get("/health");

@@ -34,6 +34,7 @@ const STATUS_BY_CODE: Record<string, number> = {
   invalid_quantity: 400,
   method_not_allowed: 405,
   payload_too_large: 413,
+  data_not_loaded: 503,
 };
 
 type Failure = { ok: false; error: { code: string; message: string; details?: unknown } };

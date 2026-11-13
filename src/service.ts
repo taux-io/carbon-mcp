@@ -26,6 +26,20 @@ export type Failure = CalcError;
 const fail = (code: string, message: string, details?: Record<string, unknown>): Failure =>
   ({ ok: false, error: { code, message, ...(details ? { details } : {}) } }) as Failure;
 
+/**
+ * 資料庫是空的（剛部署、排程還沒跑過第一次同步）時，「查不到」的原因是本服務沒有資料，
+ * 不是官方沒有公布。兩者對使用者的意義完全不同，所以查不到東西時先分辨是哪一種。
+ * 只在已經查不到的路徑上呼叫，正常查詢不會多這一次查詢。
+ */
+async function notLoaded(db: D1Database): Promise<Failure | null> {
+  const any = await db.prepare("SELECT 1 AS x FROM emission_factors LIMIT 1").first();
+  if (any) return null;
+  return fail(
+    "data_not_loaded",
+    "本服務的資料尚未載入，暫時無法查詢或計算。這不代表官方沒有公布這項係數。請稍後再試，並請勿以其他來源的數值代替本服務的回答。",
+  );
+}
+
 /** 資料分三層：government_data 是官方原文，service_curated 是本服務整理的欄位，計算結果另由引擎產生。 */
 function summary(f: StoredFactor) {
   return {
@@ -61,6 +75,10 @@ export async function listDataSources(db: D1Database) {
 export async function search(db: D1Database, params: Partial<SearchParams>) {
   const p: SearchParams = { ...params, limit: params.limit ?? 10, offset: params.offset ?? 0 };
   const { total, items } = await searchFactors(db, p);
+  if (total === 0) {
+    const empty = await notLoaded(db);
+    if (empty) return empty;
+  }
   return {
     total,
     limit: Math.min(Math.max(1, p.limit), MAX_LIMIT),
@@ -88,7 +106,7 @@ function calculabilityText(f: StoredFactor): { directly_calculable: boolean; exp
 
 export async function factorDetail(db: D1Database, id: string, version?: number) {
   const f = version === undefined ? await getFactor(db, id) : await getFactorVersion(db, id, version);
-  if (!f) return fail("factor_not_found", NOT_FOUND_MESSAGE, { factor_id: id, ...(version !== undefined ? { version } : {}) });
+  if (!f) return (await notLoaded(db)) ?? fail("factor_not_found", NOT_FOUND_MESSAGE, { factor_id: id, ...(version !== undefined ? { version } : {}) });
   const documents = await documentsFor(db, f.source_id);
   const document = documents.find((d) => d.id === f.document_id) ?? null;
   return {
@@ -144,6 +162,8 @@ export type UsageType = (typeof USAGE_TYPES)[number];
 export async function electricity(db: D1Database, year: number, usageType?: UsageType) {
   const factors = await electricityFactors(db, year);
   if (factors.length === 0) {
+    const empty = await notLoaded(db);
+    if (empty) return empty;
     const years = await availableYears(db, { source_id: "moea-electricity", category: "electricity", variant: null });
     return fail(
       "no_factor_for_year",
@@ -184,7 +204,7 @@ export interface CalcRequest extends CalcInput {
 
 export async function calculateOne(db: D1Database, req: CalcRequest, now: Date): Promise<CalcResult | Failure> {
   const factor = req.factor_version === undefined ? await getFactor(db, req.factor_id) : await getFactorVersion(db, req.factor_id, req.factor_version);
-  if (!factor) return fail("factor_not_found", `${NOT_FOUND_MESSAGE}找不到係數 ${req.factor_id}。請先用 search_emission_factors 查詢係數 ID。`, { factor_id: req.factor_id });
+  if (!factor) return (await notLoaded(db)) ?? fail("factor_not_found", `${NOT_FOUND_MESSAGE}找不到係數 ${req.factor_id}。請先用 search_emission_factors 查詢係數 ID。`, { factor_id: req.factor_id });
   const years = req.year !== undefined && factor.reference_year !== null && factor.reference_year !== req.year ? await availableYears(db, factor) : [];
   return calculate(factor, req, now, years);
 }
@@ -213,7 +233,7 @@ export async function compareEmissions(db: D1Database, baseline: CalcRequest, co
 
 export async function factorVersions(db: D1Database, id: string) {
   const versions = await listVersions(db, id);
-  if (versions.length === 0) return fail("factor_not_found", NOT_FOUND_MESSAGE, { factor_id: id });
+  if (versions.length === 0) return (await notLoaded(db)) ?? fail("factor_not_found", NOT_FOUND_MESSAGE, { factor_id: id });
   return { ok: true as const, factor_id: id, versions };
 }
 

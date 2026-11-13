@@ -1,6 +1,6 @@
 # 部署
 
-目前**尚未部署**。這份文件列出部署會新增或修改的 Cloudflare 資源，以及步驟。
+已於 2026-11-13 部署到 `https://carbon.taux.io`（帳號：拓思科技股份有限公司）。這份文件列出部署用到的 Cloudflare 資源，以及重新建置時的步驟。
 
 ## 會新增或修改的 Cloudflare 資源
 
@@ -35,8 +35,10 @@ npx wrangler secret put MOENV_API_KEY
 # 4. 部署 Worker、Custom Domain 與 Cron
 npm run deploy
 
-# 5. 資料庫一開始是空的。在 Cloudflare 儀表板手動觸發一次 Cron，或等到下一次排程。
-#    /health 在資料寫入前會回 503 與 "database": "empty"。
+# 5. 資料庫一開始是空的，資料只由排程寫入。儀表板沒有手動觸發已部署 Worker 的 Cron 的功能。
+#    等下一次排程，或暫時在 wrangler.jsonc 的 crons 加上 "* * * * *" 部署，
+#    待 /health 顯示 "database": "ok" 後移除並重新部署。
+#    資料寫入前 /health 回 503 與 "database": "empty"，查詢與計算回 data_not_loaded。
 
 # 6. 驗證
 npm run smoke -- https://carbon.taux.io
