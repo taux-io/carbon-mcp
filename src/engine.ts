@@ -432,6 +432,15 @@ export interface Comparison {
   interpretation: string;
 }
 
+/** 單一對單一的比較與混合冷媒逐成分合併後的比較，用同一套說法。 */
+export function interpret(methodChanged: boolean, decomposition: Comparison["decomposition"]): string {
+  if (methodChanged) return "兩邊的計算方法或係數口徑不同，這個差異不能直接解讀為實際的減碳成效。";
+  if (decomposition && !new Big(decomposition.factor_effect_kg).eq(0)) {
+    return "差異中有一部分來自排放係數本身的變動，不是活動量改變造成的。係數為什麼變動，請以官方公告的說明為準。";
+  }
+  return "兩邊使用相同的係數與方法，差異來自活動量的變化。";
+}
+
 export function compare(baseline: CalcResult, comparison: CalcResult): Comparison {
   const a = baseline;
   const b = comparison;
@@ -476,10 +485,6 @@ export function compare(baseline: CalcResult, comparison: CalcResult): Compariso
     method_changed: methodChanged,
     method_change_reasons: reasons,
     decomposition,
-    interpretation: methodChanged
-      ? "兩邊的計算方法或係數口徑不同，這個差異不能直接解讀為實際的減碳成效。"
-      : decomposition && !new Big(decomposition.factor_effect_kg).eq(0)
-        ? "差異中有一部分來自排放係數本身的變動，不是活動量改變造成的。係數為什麼變動，請以官方公告的說明為準。"
-        : "兩邊使用相同的係數與方法，差異來自活動量的變化。",
+    interpretation: interpret(methodChanged, decomposition),
   };
 }

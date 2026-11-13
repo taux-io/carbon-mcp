@@ -131,8 +131,8 @@ export const inventoryShape = {
 export const toInventoryItem = (a: z.infer<typeof inventoryItemSchema>) => ({ ...toAnyRequest(a), label: a.label, scope: a.scope });
 
 export const compareShape = {
-  baseline: calcSchema.describe("基準（例如去年）。"),
-  comparison: calcSchema.describe("比較對象（例如今年）。"),
+  baseline: calcOrBlendSchema.describe("基準（例如去年）。用 factor_id 或 refrigerant_blend 擇一。"),
+  comparison: calcOrBlendSchema.describe("比較對象（例如今年）。用 factor_id 或 refrigerant_blend 擇一。"),
 };
 
 export interface ToolContext {
@@ -243,10 +243,10 @@ export const TOOLS: ToolDef[] = [
     name: "compare_emissions",
     title: "Compare emissions",
     description:
-      "Compare two calculations (for example two years). Separates the effect of changed activity data from the effect of a changed factor, and flags when the calculation method differs so the difference is not read as an actual reduction. 比較兩筆計算（例如不同年度）。區分活動量改變與排放係數改變的影響；計算方法不同時會標示，避免把差異誤讀為實際減碳成效。",
+      "Compare two calculations (for example two years). Separates the effect of changed activity data from the effect of a changed factor, and flags when the calculation method differs so the difference is not read as an actual reduction. Either side may be a refrigerant blend such as R-410A (refrigerant_blend with the user-supplied composition instead of factor_id). Two blends with the same components are split component by component; blends with different components, or a blend against a single factor, get only the difference, because a blend has no official factor of its own. 比較兩筆計算（例如不同年度）。區分活動量改變與排放係數改變的影響；計算方法不同時會標示，避免把差異誤讀為實際減碳成效。兩邊都可以是混合冷媒（如 R-410A，以 refrigerant_blend 提供使用者確認過的成分比例，不給 factor_id）。成分相同的兩個混合冷媒逐成分拆解；成分不同，或單一係數對混合冷媒，只回差額，因為混合冷媒沒有官方公布的單一係數。",
     summary: { zh: "比較兩筆排放量，區分活動量與係數的影響。", en: "Compare two results, separating activity and factor effects.", ja: "2件の排出量を比較し、活動量と係数の影響を分けて示します。" },
     shape: compareShape,
-    run: (a, { db, now }) => compareEmissions(db, toRequest(a.baseline), toRequest(a.comparison), now),
+    run: (a, { db, now }) => compareEmissions(db, toAnyRequest(a.baseline), toAnyRequest(a.comparison), now),
   }),
   def({
     name: "list_factor_versions",

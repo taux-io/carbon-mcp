@@ -6,7 +6,7 @@ import Big from "big.js";
 
 import pkg from "../package.json";
 import {
-  calculate, compare, DISCLAIMER, parseDecimal, totalOf, type CalcError, type CalcInput, type CalcResult,
+  calculate, compare, DISCLAIMER, interpret, parseDecimal, totalOf, type CalcError, type CalcInput, type CalcResult, type Comparison,
 } from "./engine";
 import {
   availableYears, documentsFor, electricityFactors, getFactor, getFactorVersion, latestJobs, listSources,
@@ -359,13 +359,73 @@ export async function calculateBatch(db: D1Database, items: ActivityRequest[], n
   };
 }
 
-export async function compareEmissions(db: D1Database, baseline: CalcRequest, comparison: CalcRequest, now: Date) {
-  const a = await calculateOne(db, baseline, now);
-  const b = await calculateOne(db, comparison, now);
-  if (!a.ok || !b.ok) {
-    return fail("comparison_failed", "有一邊算不出來，無法比較。", { baseline: a.ok ? "ok" : a.error, comparison: b.ok ? "ok" : b.error });
+const kgOf = (c: Computed) => (c.kind === "single" ? c.result.emissions_kg : resultsOf(c).reduce((s, r) => s.plus(r.emissions_kg), new Big(0)).toFixed());
+
+/** 比例用 Big 比較，"50.0" 與 50 視為相同；成分的順序不影響。 */
+function pairBlendParts(a: BlendPart[], b: BlendPart[]): [BlendPart, BlendPart][] | null {
+  if (a.length !== b.length) return null;
+  const pairs: [BlendPart, BlendPart][] = [];
+  for (const pa of a) {
+    const pb = b.find((p) => p.result.factor.id === pa.result.factor.id);
+    if (!pb || !new Big(pa.mass_percent).eq(pb.mass_percent)) return null;
+    pairs.push([pa, pb]);
   }
-  return { ok: true as const, baseline: a, comparison: b, result: compare(a, b), disclaimer: DISCLAIMER };
+  return pairs;
+}
+
+/**
+ * 混合冷媒沒有官方公布的單一係數，加權 GWP 是用使用者的比例算出來的，不能當係數拆解。
+ * 所以只有成分完全相同時，才逐成分比較再把拆解加總；其餘只回差額。
+ */
+function compareComputed(a: Computed, b: Computed): Comparison {
+  if (a.kind === "single" && b.kind === "single") return compare(a.result, b.result);
+
+  const pairs = a.kind === "blend" && b.kind === "blend" ? pairBlendParts(a.parts, b.parts) : null;
+  if (!pairs) {
+    const reason =
+      a.kind === "blend" && b.kind === "blend"
+        ? "兩邊的混合冷媒成分不同（成分或比例不一樣）。"
+        : "一邊是單一係數，一邊是混合冷媒。";
+    const reasons = [`${reason}混合冷媒沒有官方公布的單一係數，加權 GWP 是依使用者提供的比例算出來的，所以不拆解活動量與係數的影響，只回差額。`];
+    return {
+      baseline_emissions_kg: kgOf(a),
+      comparison_emissions_kg: kgOf(b),
+      difference_kg: new Big(kgOf(b)).minus(kgOf(a)).toFixed(),
+      method_changed: true,
+      method_change_reasons: reasons,
+      decomposition: null,
+      interpretation: interpret(true, null),
+    };
+  }
+
+  const each = pairs.map(([pa, pb]) => compare(pa.result, pb.result));
+  const reasons = [...new Set(each.flatMap((c) => c.method_change_reasons))];
+  const decomposed = each.every((c) => c.decomposition);
+  const decomposition = decomposed
+    ? {
+        activity_effect_kg: each.reduce((s, c) => s.plus(c.decomposition!.activity_effect_kg), new Big(0)).toFixed(),
+        factor_effect_kg: each.reduce((s, c) => s.plus(c.decomposition!.factor_effect_kg), new Big(0)).toFixed(),
+        explanation: `${each[0].decomposition!.explanation}混合冷媒的成分相同，所以逐成分拆解後加總。`,
+      }
+    : null;
+  return {
+    baseline_emissions_kg: kgOf(a),
+    comparison_emissions_kg: kgOf(b),
+    difference_kg: new Big(kgOf(b)).minus(kgOf(a)).toFixed(),
+    method_changed: reasons.length > 0,
+    method_change_reasons: reasons,
+    decomposition,
+    interpretation: interpret(reasons.length > 0, decomposition),
+  };
+}
+
+export async function compareEmissions(db: D1Database, baseline: ActivityRequest, comparison: ActivityRequest, now: Date) {
+  const a = await computeActivity(db, baseline, now);
+  const b = await computeActivity(db, comparison, now);
+  if (!isComputed(a) || !isComputed(b)) {
+    return fail("comparison_failed", "有一邊算不出來，無法比較。", { baseline: isComputed(a) ? "ok" : a.error, comparison: isComputed(b) ? "ok" : b.error });
+  }
+  return { ok: true as const, baseline: present(a, now), comparison: present(b, now), result: compareComputed(a, b), disclaimer: DISCLAIMER };
 }
 
 export async function factorVersions(db: D1Database, id: string) {
