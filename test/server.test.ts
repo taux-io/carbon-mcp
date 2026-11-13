@@ -67,11 +67,11 @@ describe.each<Era>(["legacy", "modern"])("MCP (%s protocol)", (era) => {
     });
   }
 
-  it("lists all eleven tools as read-only, each with an input schema", async () => {
+  it("lists all twelve tools as read-only, each with an input schema", async () => {
     const r = await rpc("tools/list");
     const tools = r.result.tools as { name: string; inputSchema: unknown; annotations: { readOnlyHint: boolean } }[];
     expect(tools.map((t) => t.name).sort()).toEqual(TOOLS.map((t) => t.name).sort());
-    expect(tools.length).toBe(11);
+    expect(tools.length).toBe(12);
     expect(tools.every((t) => t.annotations.readOnlyHint && t.inputSchema)).toBe(true);
   });
 
@@ -223,6 +223,18 @@ describe("REST API", () => {
     expect((await get("/api/v1/sources")).status).toBe(200);
     expect((await get("/api/v1/status")).status).toBe(200);
     expect((await get("/api/v1/electricity?year=2025&usage_type=residential_tariff")).status).toBe(200);
+  });
+
+  it("matches an activity description over REST and through the MCP tool alike", async () => {
+    const res = await get("/api/v1/match?description=%E9%9B%BB%E8%B2%BB&unit=kWh&year=2025");
+    expect(res.status).toBe(200);
+    const rest = await res.json() as { requires_confirmation: boolean; candidates: { factor: { id: string } }[] };
+    expect(rest.requires_confirmation).toBe(true);
+    const viaTool = await send(mcpRequest("legacy", "tools/call", { name: "match_activity", arguments: { description: "電費", unit: "kWh", year: 2025 } }));
+    const tool = JSON.parse((await readPayload(viaTool)).result.content[0].text) as typeof rest;
+    expect(tool.candidates.map((c) => c.factor.id)).toEqual(rest.candidates.map((c) => c.factor.id));
+    expect((await get("/api/v1/match")).status).toBe(400);
+    expect((await get("/api/v1/match?description=%E5%93%A1%E5%B7%A5%E6%97%85%E9%81%8A")).status).toBe(404);
   });
 
   it("batches through REST", async () => {

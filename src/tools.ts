@@ -11,6 +11,7 @@ import {
   calculateBatch, calculateOne, compareEmissions, electricity, factorDetail, factorVersions, listDataSources,
   MAX_BATCH, methodology, METHODOLOGY_TOPICS, ping, search, updateStatus, USAGE_TYPES,
 } from "./service";
+import { matchActivity, MAX_CANDIDATES } from "./match";
 import { MAX_LIMIT } from "./store";
 
 const CATEGORIES = ["electricity", "water", "fuel_combustion", "product_footprint"] as const;
@@ -56,6 +57,13 @@ export const searchShape = {
   unit: z.string().max(20).optional().describe("係數分母的單位，例如 kWh、m3、TJ。"),
   limit: z.number().int().min(1).max(MAX_LIMIT).optional().describe(`回傳筆數，預設 10，上限 ${MAX_LIMIT}。`),
   offset: z.number().int().min(0).optional().describe("略過前幾筆（分頁用）。"),
+};
+
+export const matchShape = {
+  description: z.string().min(1).max(200).describe("活動或會計科目的描述，例如「10 月電費」「公務車加油」「塑膠原料採購」。"),
+  unit: z.string().max(20).optional().describe("活動數據的單位，例如 kWh、度、L、kg。有給就會檢查每筆候選的單位是否相容。"),
+  year: z.number().int().min(1990).max(2100).optional().describe("活動發生的年度（西元）。不給時，逐年公布的係數只列最新年度。"),
+  limit: z.number().int().min(1).max(MAX_CANDIDATES).optional().describe(`回傳的候選筆數，預設 10，上限 ${MAX_CANDIDATES}。`),
 };
 
 export const electricityShape = {
@@ -121,6 +129,15 @@ export const TOOLS: ToolDef[] = [
     summary: { zh: "以關鍵字、類別、年度搜尋排放係數。", en: "Search emission factors by keyword, category or year.", ja: "キーワード・分類・年度で排出係数を検索します。" },
     shape: searchShape,
     run: (a, { db }) => search(db, a),
+  }),
+  def({
+    name: "match_activity",
+    title: "Match activity to candidate factors",
+    description:
+      "Map an activity or ledger-account description (for example an electricity bill, fleet fuel, or a plastic resin purchase) plus an optional unit to candidate official factors. Returns candidates with unit compatibility, applicability conditions and the questions the user must answer; it never picks one. Use this when the user's wording is not an official factor name, then confirm with the user before calling calculate_emissions. The term mapping is curated by this service, not official. 把活動或會計科目的描述（例如電費、公務車加油、塑膠原料採購）與單位對到候選的官方係數，回傳每筆的單位相容性、適用條件與需要使用者回答的問題；不會代為選定。使用者的說法不是官方係數名稱時用這個工具，並在呼叫 calculate_emissions 之前先向使用者確認。用詞對照是本服務整理的，不是官方資料。",
+    summary: { zh: "把活動描述對到候選係數，列出適用條件供確認。", en: "Map an activity description to candidate factors for confirmation.", ja: "活動の説明から候補の係数を挙げ、適用条件とともに確認を求めます。" },
+    shape: matchShape,
+    run: (a, { db }) => matchActivity(db, a),
   }),
   def({
     name: "get_emission_factor",

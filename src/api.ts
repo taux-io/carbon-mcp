@@ -7,7 +7,8 @@ import { z } from "zod";
 import {
   calculateBatch, calculateOne, electricity, factorDetail, factorVersions, listDataSources, search, updateStatus,
 } from "./service";
-import { batchShape, calcSchema, electricityShape, searchShape } from "./tools";
+import { matchActivity } from "./match";
+import { batchShape, calcSchema, electricityShape, matchShape, searchShape } from "./tools";
 
 /** 瀏覽器端的跨來源呼叫只開給自己的網站與本機開發；伺服器對伺服器的呼叫不受 CORS 影響。 */
 const ALLOWED_ORIGINS = new Set(["https://carbon.taux.io", "http://localhost:8787", "http://127.0.0.1:8787"]);
@@ -29,6 +30,7 @@ function corsHeaders(request: Request): Record<string, string> {
 const STATUS_BY_CODE: Record<string, number> = {
   factor_not_found: 404,
   no_factor_for_year: 404,
+  no_candidates: 404,
   not_found: 404,
   invalid_request: 400,
   invalid_quantity: 400,
@@ -126,6 +128,11 @@ async function route(request: Request, url: URL, db: D1Database, now: Date): Pro
     return isFailure(p) ? p : electricity(db, p.year, p.usage_type);
   }
 
+  if (path === "/api/v1/match" && get) {
+    const p = parse(z.object(matchShape), queryObject(url, ["year", "limit"]));
+    return isFailure(p) ? p : matchActivity(db, p);
+  }
+
   if (path === "/api/v1/calculate" && post) {
     const body = await jsonBody(request);
     if (isFailure(body)) return body;
@@ -140,7 +147,7 @@ async function route(request: Request, url: URL, db: D1Database, now: Date): Pro
     return isFailure(p) ? p : calculateBatch(db, p.items.map(toRequest), now);
   }
 
-  const known = ["/api/v1/sources", "/api/v1/status", "/api/v1/factors", "/api/v1/electricity", "/api/v1/calculate", "/api/v1/calculate/batch"];
+  const known = ["/api/v1/sources", "/api/v1/status", "/api/v1/factors", "/api/v1/electricity", "/api/v1/match", "/api/v1/calculate", "/api/v1/calculate/batch"];
   if (known.includes(path) || one) return failure("method_not_allowed", "這個路徑不支援此 HTTP 方法。");
   return failure("not_found", "沒有這個 API 路徑。文件見 /api/docs。");
 }

@@ -265,6 +265,38 @@ export async function searchFactors(db: D1Database, p: SearchParams): Promise<{ 
   return { total: total?.n ?? 0, items: results.map(fromRow) };
 }
 
+export interface NameSelector {
+  category: string;
+  keyword?: string;
+}
+
+/**
+ * 依「類別 + 名稱包含某個字」找係數，一次查多組。只比對官方名稱（name），不比對別名，
+ * 所以結果一定是名稱裡真的有那個字的係數。year 的規則與 searchFactors 相同。
+ */
+export async function findByNames(db: D1Database, selectors: NameSelector[], year: number | undefined, limit: number): Promise<StoredFactor[]> {
+  if (selectors.length === 0) return [];
+  const binds: unknown[] = [];
+  const any = selectors
+    .map((s) => {
+      binds.push(s.category);
+      if (!s.keyword) return "(category = ?)";
+      binds.push(`%${s.keyword.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`);
+      return "(category = ? AND lower(name) LIKE ? ESCAPE '\\')";
+    })
+    .join(" OR ");
+  let yearClause = "";
+  if (year !== undefined) {
+    yearClause = " AND (reference_year = ? OR (reference_year IS NULL AND (effective_from IS NULL OR substr(effective_from,1,4) <= ?)))";
+    binds.push(year, String(year));
+  }
+  const { results } = await db
+    .prepare(`SELECT * FROM emission_factors WHERE status = 'current' AND (${any})${yearClause} ORDER BY reference_year DESC NULLS LAST, id LIMIT ?`)
+    .bind(...binds, limit)
+    .all<Row>();
+  return results.map(fromRow);
+}
+
 export async function electricityFactors(db: D1Database, year: number): Promise<StoredFactor[]> {
   const { results } = await db
     .prepare("SELECT * FROM emission_factors WHERE category = 'electricity' AND reference_year = ? AND status = 'current' ORDER BY id")

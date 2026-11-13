@@ -979,6 +979,7 @@ const ROUTES: Route[] = [
     summary: "批次計算多筆活動。",
     params: `JSON：{ "items": [...] }，每筆同 /api/v1/calculate，最多 ${MAX_BATCH} 筆`,
   },
+  { method: "GET", path: "/api/v1/match", summary: "把活動或會計科目的描述對到候選係數，附單位相容性與適用條件，供確認後再計算。", params: "description（必填）、unit、year、limit" },
   { method: "GET", path: "/api/v1/status", summary: "各來源的同步狀態。", params: "無" },
   { method: "GET", path: "/health", summary: "服務健康檢查。", params: "無" },
 ];

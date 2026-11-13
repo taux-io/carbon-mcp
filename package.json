@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "seed:local": "curl -s \"http://127.0.0.1:8787/__scheduled?cron=30+19+*+*+*\""
+    "seed:local": "curl -s \"http://127.0.0.1:8787/__scheduled?cron=30+19+*+*+*\"",
+    "check-concepts": "node scripts/check-concepts.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",

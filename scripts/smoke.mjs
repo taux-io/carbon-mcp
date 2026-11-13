@@ -53,7 +53,7 @@ try {
 
   for (const era of ["legacy", "modern"]) {
     const list = await mcp(era, "tools/list");
-    check(`MCP tools/list (${era})`, list.result?.tools?.length === 11, `${list.result?.tools?.length ?? JSON.stringify(list.error)} tools`);
+    check(`MCP tools/list (${era})`, list.result?.tools?.length === 12, `${list.result?.tools?.length ?? JSON.stringify(list.error)} tools`);
 
     const call = await mcp(era, "tools/call", { name: "calculate_emissions", arguments: CALC });
     const data = call.result ? JSON.parse(call.result.content[0].text) : null;

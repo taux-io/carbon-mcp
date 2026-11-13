@@ -19,6 +19,7 @@ npm run db:local                           # 套用 migrations 到本機 D1
 npm run dev                                # wrangler dev --test-scheduled
 npm run seed:local                         # 觸發一次排程，把已審核資料寫進本機 D1（dev 要先跑著）
 npm run smoke                              # 對跑著的服務做端到端檢查（可帶 base URL）
+npm run check-concepts                     # 檢查用詞對照表的每個字在跑著的服務上都找得到係數
 ```
 
 需要 Node 24 以上：測試用內建的 `node:sqlite` 當 D1 的替身（`test/d1.ts`），直接套用 `migrations/` 的 SQL。它是替身不是 D1，動到 SQL 的修改還要用 `npm run dev` + `npm run smoke` 在本機 D1 上跑一次。
@@ -32,6 +33,7 @@ npm run smoke                              # 對跑著的服務做端到端檢�
 - `src/server.ts`、`src/api.ts`：傳輸層。MCP 註冊、REST 路由、body 上限、批次拒絕、限流、CORS。不放商業邏輯。
 - `src/tools.ts`：11 個 MCP 工具的定義表（名稱、說明、zod 參數）。MCP 註冊、REST 的參數驗證、網站的工具說明與 `llms.txt` 都從這一份產生。
 - `src/service.ts`：MCP 與 REST 共用的唯一一套查詢與計算流程。新功能加在這裡，再由 `tools.ts` 與 `api.ts` 各接一個薄殼。
+- `src/match.ts`、`src/concepts.ts`：科目對照。`concepts.ts` 是本服務整理的用詞對照表（「塑膠原料」→ 名稱含「聚丙烯」…的係數），`match.ts` 用它找候選、檢查單位、列出待確認事項。它只找候選，不選定係數。改對照表後用 `npm run check-concepts -- <baseUrl>` 確認每個字在真實資料裡都找得到係數。
 - `src/engine.ts`、`src/units.ts`：純函式的計算引擎與單位換算，不碰資料庫與網路。
 - `src/store.ts`：D1 存取。上半部是寫入（只有排程會呼叫），下半部是查詢。
 - `src/sync.ts`：排程工作。
@@ -43,7 +45,7 @@ npm run smoke                              # 對跑著的服務做端到端檢�
 這些是產品的核心承諾，改動前先讀 `src/engine.ts` 開頭與對應的測試。
 
 - **係數只來自資料庫。** 引擎與服務層不可寫死任何係數。測試案例 12,000 kWh × 0.466 = 5,592 也是從資料庫讀係數。
-- **查不到就說查不到。** 不估算、不補齊、不拿相近的東西代替。
+- **查不到就說查不到。** 不估算、不補齊、不拿相近的東西代替。`search_emission_factors` 只做字面比對；用詞對照得到的結果只出現在 `match_activity`，而且一律標示為需確認的候選。
 - **年度不自動替代。** 使用者指定年度而係數不符時回錯誤並列出可用年度。`reference_year` 是適用年度，不是公告年份；`announcement_date` 只存官方頁面上觀察到的日期，推論的一律 `null`。
 - **單位只在同量綱內換算。** 沒有密度不把公升換成公斤。「度」在電是 kWh、在水是 m³，由係數的分母決定。
 - **數值是十進位字串。** 用 `big.js` 做精確乘法，照官方寫法儲存（`"0.530"`、`"0.17"`），不四捨五入。

@@ -83,6 +83,8 @@ export function supportedUnits(): string[] {
   return [...Object.keys(UNITS), "度（依係數為 kWh 或 m³）"];
 }
 
+export const dimensionOf = (unit: string): Dimension | null => UNITS[unit]?.dimension ?? null;
+
 /** 同量綱換算。量綱不同就丟 UnitError，不猜。 */
 export function convert(quantity: Big, from: string, to: string): Big {
   const a = UNITS[from];

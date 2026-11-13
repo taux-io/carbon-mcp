@@ -12,6 +12,7 @@ import {
 } from "./store";
 import type { StoredFactor } from "./types";
 import { supportedUnits } from "./units";
+import { relatedTerms } from "./concepts";
 
 export const SERVICE_NAME = "taiwan-carbon-open-data";
 export const VERSION: string = pkg.version;
@@ -23,7 +24,7 @@ export const ATTRIBUTION =
   "資料來源：經濟部能源署、環境部、台灣自來水公司、臺北自來水事業處等機關公開資料。標示政府資料開放授權條款－第1版者，依該條款（https://data.gov.tw/license）授權利用；本服務為非官方整理。";
 
 export type Failure = CalcError;
-const fail = (code: string, message: string, details?: Record<string, unknown>): Failure =>
+export const fail = (code: string, message: string, details?: Record<string, unknown>): Failure =>
   ({ ok: false, error: { code, message, ...(details ? { details } : {}) } }) as Failure;
 
 /**
@@ -31,7 +32,7 @@ const fail = (code: string, message: string, details?: Record<string, unknown>):
  * 不是官方沒有公布。兩者對使用者的意義完全不同，所以查不到東西時先分辨是哪一種。
  * 只在已經查不到的路徑上呼叫，正常查詢不會多這一次查詢。
  */
-async function notLoaded(db: D1Database): Promise<Failure | null> {
+export async function notLoaded(db: D1Database): Promise<Failure | null> {
   const any = await db.prepare("SELECT 1 AS x FROM emission_factors LIMIT 1").first();
   if (any) return null;
   return fail(
@@ -41,7 +42,7 @@ async function notLoaded(db: D1Database): Promise<Failure | null> {
 }
 
 /** 資料分三層：government_data 是官方原文，service_curated 是本服務整理的欄位，計算結果另由引擎產生。 */
-function summary(f: StoredFactor) {
+export function summary(f: StoredFactor) {
   return {
     id: f.id,
     name: f.name,
@@ -75,6 +76,7 @@ export async function listDataSources(db: D1Database) {
 export async function search(db: D1Database, params: Partial<SearchParams>) {
   const p: SearchParams = { ...params, limit: params.limit ?? 10, offset: params.offset ?? 0 };
   const { total, items } = await searchFactors(db, p);
+  const related = p.query ? relatedTerms(p.query) : [];
   if (total === 0) {
     const empty = await notLoaded(db);
     if (empty) return empty;
@@ -84,6 +86,9 @@ export async function search(db: D1Database, params: Partial<SearchParams>) {
     limit: Math.min(Math.max(1, p.limit), MAX_LIMIT),
     offset: Math.max(0, p.offset),
     factors: items.map(summary),
+    ...(related.length
+      ? { related_terms: related, related_terms_note: "本服務整理的相關用詞（非官方對照）：搜尋只比對官方的係數名稱，可改用這些字再查，或用 match_activity 直接取得候選係數。" }
+      : {}),
     ...(total === 0
       ? { message: NOT_FOUND_MESSAGE, hint: "搜尋比對的是官方的係數名稱，請試試更具體或不同的用詞（例如「塑膠原料」改查「聚丙烯」「聚乙烯」）。可用 list_data_sources 查看各來源的狀態與筆數。" }
       : {}),

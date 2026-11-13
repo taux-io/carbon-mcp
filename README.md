@@ -37,9 +37,11 @@ claude mcp add --transport http carbon https://carbon.taux.io/mcp
 
 ## MCP 工具
 
-`ping`、`list_data_sources`、`search_emission_factors`、`get_emission_factor`、`get_electricity_factor`、`calculate_emissions`、`calculate_batch`、`compare_emissions`、`list_factor_versions`、`check_factor_updates`、`get_methodology`。
+`ping`、`list_data_sources`、`search_emission_factors`、`match_activity`、`get_emission_factor`、`get_electricity_factor`、`calculate_emissions`、`calculate_batch`、`compare_emissions`、`list_factor_versions`、`check_factor_updates`、`get_methodology`。
 
 定義在 [`src/tools.ts`](src/tools.ts)；參數說明在 `/tools`。
+
+使用者的說法不是官方係數名稱時（「10 月電費」「塑膠原料採購」），用 `match_activity`：它回傳候選係數、單位是否相容、適用條件與待確認事項，不會代為選定。ERP 串接時可用它把會計科目對到係數，由人確認後把 `factor_id` 存起來重複使用。
 
 ## REST API
 
@@ -51,6 +53,7 @@ GET  /api/v1/factors?query=&category=&factor_type=&year=&unit=&limit=&offset=
 GET  /api/v1/factors/:id            （可加 ?version=）
 GET  /api/v1/factors/:id/versions
 GET  /api/v1/electricity?year=&usage_type=
+GET  /api/v1/match?description=&unit=&year=&limit=
 POST /api/v1/calculate
 POST /api/v1/calculate/batch
 GET  /api/v1/status
@@ -91,7 +94,7 @@ npm run dry-run                       # 確認 Worker 能 bundle
 
 2026-11-13 在開發機上的結果：
 
-- `npm test`：5 個檔案、137 項測試全部通過。
+- `npm test`：6 個檔案、156 項測試全部通過。
 - `npm run typecheck`、`npm run dry-run`：通過。
 - `npm run smoke`（本機 `wrangler dev` 與本機 D1）：19 項檢查全部通過，包含兩個 MCP 協定版本的 `initialize`、`tools/list`、`tools/call`，以及 REST 計算。12,000 kWh 的 2025 年產業用電算出 5,592 kgCO2e，係數 0.466 讀自資料庫。
 - 同一次排程向能源署開放資料 CSV 做了真實的交叉檢查：CSV 的 21 個年度與已審核資料一致。
@@ -118,7 +121,7 @@ npm run dry-run                       # 確認 Worker 能 bundle
 
 未完成或待驗證：
 
-- **產品碳足跡的搜尋只比對官方名稱。** 查「塑膠原料」找不到「聚丙烯」，沒有同義詞對照。以包、瓶、片等件數計的係數（例如衛生紙）只能查、不能算。
+- **用詞對照只涵蓋常見品項。** `match_activity` 靠 `src/concepts.ts` 的對照表把「塑膠原料」「電費」「公務車加油」對到候選係數；表裡沒有的說法（例如差旅、住宿）對不到。比對的是名稱裡的字，所以「聚丙烯」也會帶出「聚丙烯腈棉」，要由使用者確認。以包、瓶、片等件數計的係數只能查、不能算。
 - 用水以外的擴充來源（運輸、廢棄物）：沒有找到邊界明確的官方結構化係數，未收錄。
 - 環境部公告中的其餘燃料、製程與逸散係數。
 - 網站的社群分享圖（og:image）與 favicon。
