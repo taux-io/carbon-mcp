@@ -538,7 +538,7 @@ const GWP_FACTORS: Factor[] = FLUORINATED_GWP.map(([slug, zh, abbr, formula, fam
     "數值是溫暖化潛勢（GWP），活動數據是「逸散到大氣的氣體質量」，不是設備的填充量。",
     "計算時必須說明數量是實際逸散（補充）量，還是設備填充量；以填充量計算需另外提供年逸散率。",
     "官方附表三只提供各類設備逸散率的範圍，沒有單一預設值，本服務不會代為選定逸散率。",
-    "附表四只列純物質。R-410A、R-407C 這類混合冷媒不在表內，可用 calculate_emissions 的 refrigerant_blend 計算：由使用者提供各成分的質量百分比，逐成分計算後加總。本服務沒有內建任何冷媒的成分比例。",
+    "附表四只列純物質。R-410A、R-407C 這類混合冷媒不在表內，可用 refrigerant_blend 計算（calculate_emissions、calculate_batch、compare_emissions、build_inventory 都接受）：由使用者提供各成分的質量百分比，逐成分計算後加總。本服務沒有內建任何冷媒的成分比例。",
   ],
   source_url: "https://ghgregistry.moenv.gov.tw/epa_ghg/Downloads/FileDownloads.aspx?Type_ID=1",
   original: { 附表: "附表四、溫暖化潛勢", 名稱: zh, 縮寫: abbr, 化學式: formula, 溫暖化潛勢: gwp },
