@@ -458,6 +458,10 @@ export function compare(baseline: CalcResult, comparison: CalcResult): Compariso
     const la = a.user_supplied?.lower_heating_value;
     const lb = b.user_supplied?.lower_heating_value;
     if (la?.value !== lb?.value || la?.unit !== lb?.unit) reasons.push("兩邊使用的低位熱值不同。");
+    // 填充量乘逸散率是估算，實際逸散量是量測；兩者的差不是活動量的變化。
+    const ra = a.user_supplied?.refrigerant_leak?.basis;
+    const rb = b.user_supplied?.refrigerant_leak?.basis;
+    if (ra && rb && ra !== rb) reasons.push("冷媒數量的計算依據不同（一邊是設備填充量乘年逸散率，一邊是實際逸散量）。");
   }
 
   const diff = new Big(b.emissions_kg).minus(a.emissions_kg);

@@ -223,7 +223,7 @@ export interface BlendComponent {
   mass_percent: string | number;
 }
 
-export type BlendRequest = Omit<CalcRequest, "factor_id" | "factor_version"> & { components: BlendComponent[] };
+export type BlendRequest = Omit<CalcRequest, "factor_id"> & { components: BlendComponent[] };
 
 export const MAX_BLEND_COMPONENTS = 6;
 
@@ -233,6 +233,10 @@ export const MAX_BLEND_COMPONENTS = 6;
  * 每個成分都走單一冷媒的計算路徑，所以每一筆都追溯得到官方係數與版本。
  */
 export async function computeBlend(db: D1Database, req: BlendRequest, now: Date): Promise<{ ok: true; parts: { mass_percent: string; result: CalcResult }[] } | Failure> {
+  // 一個版本號對不上多個成分各自的版本歷史；與其默默用目前版本，不如明說不支援。
+  if (req.factor_version !== undefined) {
+    return fail("invalid_request", "混合冷媒不支援 factor_version：各成分的版本歷史各自獨立，一個版本號無法對應。要重現過去的計算，請改用 factor_id 逐一計算各成分，並各自指定版本。");
+  }
   const parts = req.components.map((c) => ({ id: c.factor_id, pct: parseDecimal(c.mass_percent) }));
   if (parts.length < 2 || parts.length > MAX_BLEND_COMPONENTS) {
     return fail("invalid_composition", `混合冷媒需要 2 到 ${MAX_BLEND_COMPONENTS} 個成分。單一冷媒請直接用 factor_id 計算。`);
@@ -377,6 +381,8 @@ function pairBlendParts(a: BlendPart[], b: BlendPart[]): [BlendPart, BlendPart][
  * 混合冷媒沒有官方公布的單一係數，加權 GWP 是用使用者的比例算出來的，不能當係數拆解。
  * 所以只有成分完全相同時，才逐成分比較再把拆解加總；其餘只回差額。
  */
+const gasBasisOf = (c: Computed) => (c.kind === "single" ? c.result.emissions_gas_basis : "CO2e");
+
 function compareComputed(a: Computed, b: Computed): Comparison {
   if (a.kind === "single" && b.kind === "single") return compare(a.result, b.result);
 
@@ -386,7 +392,10 @@ function compareComputed(a: Computed, b: Computed): Comparison {
       a.kind === "blend" && b.kind === "blend"
         ? "兩邊的混合冷媒成分不同（成分或比例不一樣）。"
         : "一邊是單一係數，一邊是混合冷媒。";
-    const reasons = [`${reason}混合冷媒沒有官方公布的單一係數，加權 GWP 是依使用者提供的比例算出來的，所以不拆解活動量與係數的影響，只回差額。`];
+    const reasons = [
+      ...(gasBasisOf(a) !== gasBasisOf(b) ? ["氣體基礎不同（CO2 與 CO2e）。"] : []),
+      `${reason}混合冷媒沒有官方公布的單一係數，加權 GWP 是依使用者提供的比例算出來的，所以不拆解活動量與係數的影響，只回差額。`,
+    ];
     return {
       baseline_emissions_kg: kgOf(a),
       comparison_emissions_kg: kgOf(b),

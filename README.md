@@ -98,7 +98,7 @@ npm run dry-run                       # 確認 Worker 能 bundle
 
 2026-11-13 在開發機上的結果：
 
-- `npm test`：8 個檔案、238 項測試全部通過。
+- `npm test`：8 個檔案、243 項測試全部通過。
 - `npm run typecheck`、`npm run dry-run`：通過。
 - `npm run smoke`（本機 `wrangler dev` 與本機 D1）：24 項檢查全部通過，包含兩個 MCP 協定版本的 `initialize`、`tools/list`、`tools/call`，以及 REST 計算。12,000 kWh 的 2025 年產業用電算出 5,592 kgCO2e，係數 0.466 讀自資料庫。
 - 同一次排程向能源署開放資料 CSV 做了真實的交叉檢查：CSV 的 21 個年度與已審核資料一致。
