@@ -157,8 +157,8 @@ const ZH: Copy = {
       text: "台灣自來水公司 2007 至 2025 年，單位是 CO2；臺北自來水事業處 2018 至 2025 年，單位是 CO2e。兩者服務區域與邊界不同，不能混用或相加。",
     },
     {
-      title: "燃料燃燒",
-      text: "環境部 113 年 2 月 5 日公告的溫室氣體排放係數，單位是 kg/TJ，依氣體（CO2、CH4、N2O）分列。官方沒有每公升的係數，計算時必須由你提供燃料的低位熱值。目前只匯入常用燃料。",
+      title: "燃料燃燒與冷媒逸散",
+      text: "環境部 113 年 2 月 5 日公告的溫室氣體排放係數，單位是 kg/TJ，依氣體（CO2、CH4、N2O）分列。官方沒有每公升的係數，計算時必須由你提供燃料的低位熱值。同一份公告的含氟氣體溫暖化潛勢也已收錄，可計算冷媒逸散：官方只提供各類設備逸散率的範圍，年逸散率要由你提供；R-410A 等混合冷媒不在官方表內。",
     },
     {
       title: "產品碳足跡",
@@ -289,8 +289,8 @@ const EN: Copy = {
       text: "Taiwan Water Corporation, 2007 to 2025, expressed in CO2; Taipei Water Department, 2018 to 2025, expressed in CO2e. The service areas and boundaries differ, so the two must not be mixed or added.",
     },
     {
-      title: "Fuel combustion",
-      text: "Greenhouse gas emission factors announced by the Ministry of Environment on 5 February 2024 (ROC year 113), in kg/TJ and split by gas (CO2, CH4, N2O). There is no official per-litre factor, so you must supply the fuel's lower heating value. Only common fuels are imported so far.",
+      title: "Fuel combustion and refrigerant leakage",
+      text: "Greenhouse gas emission factors announced by the Ministry of Environment on 5 February 2024 (ROC year 113), in kg/TJ and split by gas (CO2, CH4, N2O). There is no official per-litre factor, so you must supply the fuel's lower heating value. The same announcement's global warming potentials for fluorinated gases are included, so refrigerant leakage can be calculated: the official table gives only a range of leak rates per equipment type, so you supply the annual leak rate, and blends such as R-410A are not in the official table.",
     },
     {
       title: "Product carbon footprint",
@@ -422,8 +422,8 @@ const JA: Copy = {
       text: "台湾自来水公司の2007年から2025年まではCO2、台北自来水事業処の2018年から2025年まではCO2e表記です。給水区域と算定境界が異なるため、混ぜたり合算したりできません。",
     },
     {
-      title: "燃料の燃焼",
-      text: "環境部が2024年2月5日（民国113年）に公告した温室効果ガス排出係数です。単位はkg/TJで、ガス（CO2、CH4、N2O）ごとに分かれています。公式にはリットル当たりの係数がないため、燃料の低位発熱量をご自身で指定する必要があります。取り込み済みなのは、一般的な燃料のみです。",
+      title: "燃料の燃焼と冷媒の漏えい",
+      text: "環境部が2024年2月5日（民国113年）に公告した温室効果ガス排出係数です。単位はkg/TJで、ガス（CO2、CH4、N2O）ごとに分かれています。公式にはリットル当たりの係数がないため、燃料の低位発熱量をご自身で指定する必要があります。同じ公告にあるフッ素系ガスの地球温暖化係数も収録しており、冷媒の漏えいを計算できます。公式の表が示すのは機器の種類ごとの漏えい率の範囲だけなので、年間漏えい率はご自身で指定してください。R-410Aなどの混合冷媒は公式の表にありません。",
     },
     {
       title: "製品のカーボンフットプリント",

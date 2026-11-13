@@ -153,7 +153,7 @@ describe.each<Era>(["legacy", "modern"])("MCP (%s protocol)", (era) => {
 
   it("searches, describes, versions and reports sources and status", async () => {
     const found = await call("search_emission_factors", { query: "柴油" });
-    expect(found.data.total).toBe(2);
+    expect(found.data.total).toBe(3);
     const none = await call("search_emission_factors", { query: "衛生紙" });
     expect(none.data.message).toBe("目前沒有找到符合條件且已驗證的官方排放係數。");
     const detail = await call("get_emission_factor", { factor_id: "twc-water-2025" });

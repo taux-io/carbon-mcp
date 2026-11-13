@@ -62,6 +62,40 @@ describe("a typical office inventory", () => {
   });
 });
 
+describe("refrigerant leakage in the inventory", () => {
+  const AC: InventoryItem = { label: "辦公室冷氣 R-32", factor_id: "moenv-gwp-2024-hfc-32", quantity: 20, quantity_unit: "kg", context: { refrigerant: { basis: "charge", leak_rate_percent: 5, equipment_type: "residential_commercial_ac" } } };
+
+  it("puts refrigerant leakage in Scope 1 and adds it to the Scope 1+2 total", async () => {
+    const inv = await build([ELECTRICITY, AC], 2025);
+    expect(scopeOf(inv, 1).items[0]).toMatchObject({ label: "辦公室冷氣 R-32", emissions_kg: "677", factor_type: "fugitive_emission" });
+    expect(inv.scope_1_and_2_total).toMatchObject({ available: true, emissions_kg: "6269" });
+  });
+
+  it("splits Scope 1 by gas across combustion and refrigerants, summing to the subtotal", async () => {
+    const inv = await build([DIESEL, AC]);
+    const gas = scopeOf(inv, 1).by_gas_kg_co2e!;
+    expect(Object.keys(gas).sort()).toEqual(["CH4", "CO2", "HFCs", "N2O"]);
+    expect(gas.HFCs).toBe("677");
+    const sum = Object.values(gas).reduce((s, v) => s.plus(v), new Big(0));
+    expect(sum.toFixed()).toBe(scopeOf(inv, 1).subtotal.emissions_kg);
+  });
+
+  it("withholds the Scope 1 subtotal when the refrigerant basis is missing", async () => {
+    const inv = await build([{ label: "冷氣", factor_id: "moenv-gwp-2024-hfc-32", quantity: 20, quantity_unit: "kg" }]);
+    expect(inv.failed_items[0]).toMatchObject({ scope: 1, error: { code: "missing_refrigerant_basis" } });
+    expect(scopeOf(inv, 1).subtotal.available).toBe(false);
+  });
+
+  it("lists biogenic CO2 on the line and keeps it out of the subtotal", async () => {
+    const wood: InventoryItem = { label: "木質顆粒鍋爐", factor_id: "moenv-ghg-2024-stationary-wood-wood-waste", quantity: 1, quantity_unit: "t", context: { lower_heating_value: { value: 4000, unit: "kcal/kg" } } };
+    const inv = await build([wood]);
+    const line = scopeOf(inv, 1).items[0];
+    expect(new Big(line.biogenic_co2_kg!).gt(line.emissions_kg)).toBe(true);
+    expect(scopeOf(inv, 1).subtotal.emissions_kg).toBe(line.emissions_kg);
+    expect(scopeOf(inv, 1).by_gas_kg_co2e!.CO2).toBeUndefined();
+  });
+});
+
 describe("totals that would mislead are withheld", () => {
   it("does not add CO2 to CO2e: the all-scope total is withheld, Scope 1+2 still stands", async () => {
     const inv = await build([ELECTRICITY, WATER_TWC]);

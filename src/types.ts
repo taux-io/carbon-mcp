@@ -5,13 +5,14 @@
  * - announcement_*：官方公告的年份／日期。只存在官方頁面上觀察到的值，推論的一律 null。
  */
 
-export type Category = "electricity" | "water" | "fuel_combustion" | "product_footprint";
+export type Category = "electricity" | "water" | "fuel_combustion" | "refrigerant" | "product_footprint";
 
 export type FactorType =
   | "purchased_electricity"
   | "water_supply"
   | "stationary_combustion"
   | "mobile_combustion"
+  | "fugitive_emission"
   | "product_carbon_footprint";
 
 /** 係數分子的氣體基礎。CO2 與 CO2e 不可相加（台水公布的是 CO2）。 */
@@ -64,6 +65,8 @@ export interface GasComponent {
   gas: Gas;
   /** 十進位字串，kg/TJ。 */
   value: string;
+  /** 生質燃料的 CO2：要計算並單獨表列，但不計入排放總量（環境部盤查作業指引）。 */
+  biogenic?: boolean;
 }
 
 export interface Factor {

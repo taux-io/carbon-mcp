@@ -223,6 +223,9 @@ export interface SearchParams {
 
 export const MAX_LIMIT = 50;
 
+/** 含數字、只由英數字與連字號組成的關鍵字，視為編號。 */
+const CODE_LIKE = /^(?=.*\d)[a-z0-9][a-z0-9.-]*$/;
+
 /**
  * 搜尋。query 以空白切成關鍵字，每個關鍵字都要出現在名稱或別名裡；
  * 另外，如果整句話裡包含某筆係數的中文別名（「辦公室一年的用電」含「用電」），也算符合。
@@ -235,9 +238,21 @@ export async function searchFactors(db: D1Database, p: SearchParams): Promise<{ 
   const q = p.query?.trim().toLowerCase();
   if (q) {
     const tokens = q.split(/\s+/).slice(0, 8);
-    const all = tokens.map(() => "search_text LIKE ? ESCAPE '\\'").join(" AND ");
+    const tokenBinds: unknown[] = [];
+    const all = tokens
+      .map((t) => {
+        // 像編號的關鍵字（R-32、HFC-134a）必須比對到完整的詞：子字串比對會讓「R-22」配到 HFC-227、
+        // 「R-32」配到 HFC-329p，而冷媒之間的 GWP 可以差好幾倍。
+        if (CODE_LIKE.test(t)) {
+          tokenBinds.push(`%${t}`, `*${t}[^0-9a-z]*`);
+          return "(search_text LIKE ? OR search_text GLOB ?)";
+        }
+        tokenBinds.push(`%${t.replace(/[\\%_]/g, "\\$&")}%`);
+        return "search_text LIKE ? ESCAPE '\\'";
+      })
+      .join(" AND ");
     where.push(`((${all}) OR EXISTS (SELECT 1 FROM json_each(emission_factors.aliases) WHERE length(json_each.value) >= 2 AND json_each.value GLOB '*[^ -~]*' AND instr(?, lower(json_each.value)) > 0))`);
-    binds.push(...tokens.map((t) => `%${t.replace(/[\\%_]/g, "\\$&")}%`), q);
+    binds.push(...tokenBinds, q);
   }
   if (p.category) (where.push("category = ?"), binds.push(p.category));
   if (p.factor_type) (where.push("factor_type = ?"), binds.push(p.factor_type));

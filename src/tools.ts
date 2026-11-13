@@ -11,12 +11,13 @@ import {
   calculateBatch, calculateOne, compareEmissions, electricity, factorDetail, factorVersions, listDataSources,
   MAX_BATCH, methodology, METHODOLOGY_TOPICS, ping, search, updateStatus, USAGE_TYPES,
 } from "./service";
+import { REFRIGERATION_EQUIPMENT, type RefrigerationEquipment } from "./data/reviewed";
 import { buildInventory } from "./inventory";
 import { matchActivity, MAX_CANDIDATES } from "./match";
 import { MAX_LIMIT } from "./store";
 
-const CATEGORIES = ["electricity", "water", "fuel_combustion", "product_footprint"] as const;
-const FACTOR_TYPES = ["purchased_electricity", "water_supply", "stationary_combustion", "mobile_combustion", "product_carbon_footprint"] as const;
+const CATEGORIES = ["electricity", "water", "fuel_combustion", "refrigerant", "product_footprint"] as const;
+const FACTOR_TYPES = ["purchased_electricity", "water_supply", "stationary_combustion", "mobile_combustion", "fugitive_emission", "product_carbon_footprint"] as const;
 
 const quantity = z
   .union([z.number(), z.string()])
@@ -29,13 +30,27 @@ const heatingValue = z
   })
   .describe("低位熱值。燃料燃燒係數必填，必須來自使用者（自行檢測或供應商提供）；官方沒有預設值，請勿自行假設。");
 
+const refrigerant = z
+  .object({
+    basis: z.enum(["leaked_amount", "charge"]).describe("數量是哪一種：leaked_amount 是實際逸散或補充的量；charge 是設備填充量（需另給 leak_rate_percent）。"),
+    leak_rate_percent: z.union([z.number(), z.string()]).optional().describe("年逸散率（%），basis 為 charge 時必填。官方只提供各類設備的範圍，請向使用者確認，勿自行假設。"),
+    equipment_type: z
+      .enum(Object.keys(REFRIGERATION_EQUIPMENT) as [RefrigerationEquipment, ...RefrigerationEquipment[]])
+      .optional()
+      .describe("設備類型。有給就會與官方附表三的逸散率範圍比對，例如 residential_commercial_ac（住宅及商業建築空調）、chiller（冰水機）、mobile_ac（車輛空調）。"),
+  })
+  .describe("冷媒等含氟氣體逸散的計算依據。必須由使用者提供，本服務不會假設數量是填充量還是逸散量。");
+
 /** 一筆活動的計算參數。calculate_emissions、calculate_batch、compare_emissions 與 REST 共用。 */
 export const calcShape = {
   factor_id: z.string().min(1).max(120).describe("係數 ID，來自 search_emission_factors 或 get_electricity_factor 的結果。請勿自行猜測。"),
   quantity,
   quantity_unit: z.string().min(1).max(20).describe("活動數據的單位，例如 kWh、度、L、公秉、kg、t、m3。「度」在電是 kWh、在水是 m³。"),
   year: z.number().int().min(1990).max(2100).optional().describe("活動發生的年度（西元）。有給就必須與係數的適用年度相符，不會自動以其他年度代替。"),
-  optional_context: z.object({ lower_heating_value: heatingValue.optional() }).optional().describe("補充資料。燃料燃燒係數需要 lower_heating_value。"),
+  optional_context: z
+    .object({ lower_heating_value: heatingValue.optional(), refrigerant: refrigerant.optional() })
+    .optional()
+    .describe("補充資料。燃料燃燒係數需要 lower_heating_value；冷媒等含氟氣體的逸散需要 refrigerant。"),
   factor_version: z.number().int().min(1).optional().describe("指定係數版本，用來重現過去的計算。不給就用目前版本。"),
 };
 export const calcSchema = z.object(calcShape);
@@ -52,7 +67,7 @@ const toRequest = (a: CalcArgs) => ({
 
 export const searchShape = {
   query: z.string().max(100).optional().describe("關鍵字，繁體中文或英文，例如 電力、柴油、自來水、gasoline。多個關鍵字以空白分隔。"),
-  category: z.enum(CATEGORIES).optional().describe("類別：electricity 電力、water 自來水、fuel_combustion 燃料燃燒、product_footprint 產品碳足跡。"),
+  category: z.enum(CATEGORIES).optional().describe("類別：electricity 電力、water 自來水、fuel_combustion 燃料燃燒、refrigerant 冷媒等含氟氣體、product_footprint 產品碳足跡。"),
   factor_type: z.enum(FACTOR_TYPES).optional().describe("係數類型，用來區分固定燃燒與移動燃燒等。"),
   year: z.number().int().min(1990).max(2100).optional().describe("適用年度（西元）。"),
   unit: z.string().max(20).optional().describe("係數分母的單位，例如 kWh、m3、TJ。"),

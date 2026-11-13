@@ -53,6 +53,9 @@ function unitFit(f: StoredFactor, unit: string | undefined): { fit: UnitFit; not
 function nextStep(f: StoredFactor, fit: UnitFit): string {
   if (fit === "lookup_only") return "只能引用係數本身，不能用本服務計算。";
   if (fit === "incompatible") return "需要把活動數據改成係數的單位，或改選其他係數。";
+  if (f.factor_type === "fugitive_emission") {
+    return `確認冷媒種類後，以 factor_id「${f.id}」呼叫 calculate_emissions，並在 optional_context.refrigerant 說明數量是逸散量（leaked_amount）還是填充量（charge，需附 leak_rate_percent）。`;
+  }
   if (f.calculability === "needs_heating_value") return `確認適用後，以 factor_id「${f.id}」呼叫 calculate_emissions，並在 optional_context.lower_heating_value 提供低位熱值。`;
   return `確認適用後，以 factor_id「${f.id}」呼叫 calculate_emissions。`;
 }
@@ -86,6 +89,9 @@ function questionsFor(candidates: StoredFactor[], fits: UnitFit[], yearGiven: bo
   }
   if (types.has("stationary_combustion") && types.has("mobile_combustion")) {
     q.push("燃料用在固定設備（鍋爐、發電機）還是車輛？固定燃燒與移動燃燒的係數不同。");
+  }
+  if (types.has("fugitive_emission")) {
+    q.push("用的是哪一種冷媒？數量是實際逸散（補充）量還是設備填充量？以填充量計算需要年逸散率，官方只提供各類設備的範圍。混合冷媒（如 R-410A）不在官方表內，需依成分拆開計算。");
   }
   if (fits.includes("needs_heating_value")) q.push("燃料的低位熱值是多少？官方沒有預設值，需自行檢測或向供應商取得。");
   if (types.has("product_carbon_footprint") && types.size > 1) {

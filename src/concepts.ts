@@ -78,6 +78,7 @@ export const CONCEPTS: Concept[] = [
   { id: "glass", label: "玻璃", terms: ["玻璃", "glass"], selectors: footprint("玻璃") },
   { id: "copper", label: "銅", terms: ["銅材", "銅", "copper"], selectors: footprint("銅") },
   { id: "freight", label: "貨物運輸", terms: ["貨運", "運費", "物流", "運輸", "freight", "shipping"], selectors: [...footprint("貨車", "海運貨物", "鐵路"), broad("運輸")] },
+  { id: "refrigerant", label: "冷媒", terms: ["冷媒", "冷氣", "空調", "冰水主機", "冰水機", "冷凍", "refrigerant", "air conditioning"], selectors: [{ category: "refrigerant" }] },
   { id: "waste", label: "廢棄物處理", terms: ["廢棄物", "垃圾", "清運", "waste"], selectors: footprint("廢棄物", "焚化", "掩埋") },
 ];
 

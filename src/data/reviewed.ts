@@ -73,7 +73,7 @@ export const SOURCES: DataSource[] = [
     ingestion: "reviewed_import",
     status: "active",
     notes:
-      "只提供 PDF 與 ODS，無 API。係數以低位熱值為基礎（kg/TJ），分 CO2、CH4、N2O；官方不提供預設熱值，也不提供每公升係數。目前只匯入常用燃料，其餘列（製程、逸散、其他燃料）尚未匯入。",
+      "只提供 PDF 與 ODS，無 API。已匯入附表一固定燃燒全部燃料與部分移動燃燒燃料（kg/TJ，分 CO2、CH4、N2O，需自備低位熱值）、附表四含氟氣體的溫暖化潛勢（用於冷媒等逸散）。附表二製程與附表三的廢水、廢棄物是公式與參數，尚未匯入。",
   },
   {
     id: "moenv-cfp",
@@ -331,6 +331,7 @@ function fuel(
   ch4: string,
   n2o: string,
   extraNotes: string[] = [],
+  biogenic = false,
 ): Factor {
   const sheetName = sheet === "stationary" ? "固定燃燒" : "移動燃燒";
   return {
@@ -347,7 +348,7 @@ function fuel(
     gas_basis: "CO2e",
     value: null,
     components: [
-      { gas: "CO2", value: co2 },
+      biogenic ? { gas: "CO2", value: co2, biogenic: true } : { gas: "CO2", value: co2 },
       { gas: "CH4", value: ch4 },
       { gas: "N2O", value: n2o },
     ],
@@ -378,6 +379,171 @@ function fuel(
   };
 }
 
+const BIOGENIC_NOTE = "生質燃料：燃燒產生的 CO2 需計算並單獨表列，但不計入排放總量；CH4 與 N2O 計入總量（環境部盤查作業指引）。";
+
+/** 附表一固定燃燒的其餘列。[slug, 名稱, 英譯, 所屬大類, CO2, CH4, N2O（kg/TJ）, 是否為生質燃料] */
+const OTHER_STATIONARY_FUELS: [string, string, string, string | null, string, string, string, boolean][] = [
+  ["crude-oil", "原油", "Crude Oil", null, "73300", "3", "0.6", false],
+  ["orimulsion", "奧里油", "Orimulsion", null, "77000", "3", "0.6", false],
+  ["natural-gas-liquids-ngls", "液化天然氣", "Natural Gas Liquids (NGLs)", null, "64200", "3", "0.6", false],
+  ["aviation-gasoline", "航空汽油", "Aviation Gasoline", "汽油", "70000", "3", "0.6", false],
+  ["jet-gasoline", "航空燃油-汽油型", "Jet Gasoline", "汽油", "70000", "3", "0.6", false],
+  ["jet-kerosene", "航空燃油-煤油型", "Jet Kerosene", null, "71500", "3", "0.6", false],
+  ["other-kerosene", "其他煤油", "Other Kerosene", null, "71900", "3", "0.6", false],
+  ["shale-oil", "頁岩油", "Shale Oil", null, "73300", "3", "0.6", false],
+  ["ethane", "乙烷", "Ethane", null, "61600", "1", "0.1", false],
+  ["naphtha", "石油腦", "Naphtha", null, "73300", "3", "0.6", false],
+  ["bitumen", "瀝青", "Bitumen", null, "80700", "3", "0.6", false],
+  ["lubricants", "潤滑油", "Lubricants", null, "73300", "3", "0.6", false],
+  ["petroleum-coke", "石油焦", "Petroleum Coke", null, "97500", "3", "0.6", false],
+  ["refinery-feedstocks", "煉油廠進料", "Refinery Feedstocks", null, "73300", "3", "0.6", false],
+  ["refinery-gas", "煉油氣", "Refinery Gas", "其他油品", "57600", "1", "0.1", false],
+  ["paraffin-waxes", "石蠟", "Paraffin Waxes", "其他油品", "73300", "3", "0.6", false],
+  ["white-spirit-sbp", "白精油", "White Spirit & SBP", "其他油品", "73300", "3", "0.6", false],
+  ["other-petroleum-products", "其他石油產品", "Other Petroleum Products", "其他油品", "73300", "3", "0.6", false],
+  ["anthracite", "無煙煤", "Anthracite", null, "98300", "1", "1.5", false],
+  ["coking-coal", "煉焦煤", "Coking Coal", null, "94600", "1", "1.5", false],
+  ["other-bituminous-coal", "其他煙煤", "Other Bituminous Coal", null, "94600", "1", "1.5", false],
+  ["sub-bituminous-coal", "亞煙煤", "Sub-Bituminous Coal", null, "96100", "1", "1.5", false],
+  ["lignite", "褐煤", "Lignite", null, "101000", "1", "1.5", false],
+  ["oil-shale-and-tar-sands", "油頁岩/焦油砂", "Oil Shale and Tar Sands", null, "107000", "1", "1.5", false],
+  ["brown-coal-briquettes", "褐煤塊", "Brown Coal Briquettes", null, "97500", "1", "1.5", false],
+  ["patent-fuel", "煤球", "Patent Fuel", null, "97500", "1", "1.5", false],
+  ["coke-oven-coke-and-lignite-coke", "焦炭", "Coke Oven Coke and Lignite Coke", "焦炭", "107000", "1", "1.5", false],
+  ["gas-coke", "煤氣焦碳", "Gas Coke", "焦炭", "107000", "1", "0.1", false],
+  ["coal-tar", "煤焦油", "Coal Tar", null, "80700", "1", "1.5", false],
+  ["gas-works-gas", "煤氣廠氣體", "Gas Works Gas", "衍生氣體", "44400", "1", "0.1", false],
+  ["coke-oven-gas", "焦爐氣", "Coke Oven Gas", "衍生氣體", "44400", "1", "0.1", false],
+  ["blast-furnace-gas", "高爐氣", "Blast Furnace Gas", "衍生氣體", "260000", "1", "0.1", false],
+  ["oxygen-steel-furnace-gas", "轉爐氣", "Oxygen Steel Furnace Gas", "衍生氣體", "182000", "1", "0.1", false],
+  ["municipal-wastes-non-biomass-fraction", "都市廢棄物 - 非生質部分", "Municipal Wastes (non-biomass fraction)", null, "91700", "30", "4", false],
+  ["industrial-wastes", "事業廢棄物", "Industrial Wastes", null, "143000", "30", "4", false],
+  ["waste-oils", "廢油", "Waste Oils", null, "73300", "30", "4", false],
+  ["peat", "泥煤", "Peat", null, "106000", "1", "1.5", false],
+  ["wood-wood-waste", "木材/ 廢材", "Wood/Wood Waste", "固體生質燃料", "112000", "30", "4", true],
+  ["sulphite-lyes-black-liquor", "亞硫酸鹽廢液 / 黑液", "Sulphite lyes (Black Liquor)", "固體生質燃料", "95300", "3", "2", true],
+  ["other-primary-solid-biomass", "其他初級固體生質", "Other Primary Solid Biomass", "固體生質燃料", "100000", "30", "4", true],
+  ["charcoal", "木炭", "Charcoal", "固體生質燃料", "112000", "200", "4", true],
+  ["biogasoline", "生質汽油", "Biogasoline", "液體生質燃料", "70800", "3", "0.6", true],
+  ["biodiesels", "生質柴油", "Biodiesels", "液體生質燃料", "70800", "3", "0.6", true],
+  ["other-liquid-biofuels", "其他液體生質燃料", "Other Liquid Biofuels", "液體生質燃料", "79600", "3", "0.6", true],
+  ["landfill-gas", "掩埋沼氣", "Landfill Gas", "氣體生質燃料", "54600", "1", "0.1", true],
+  ["sludge-gas", "污泥沼氣", "Sludge Gas", "氣體生質燃料", "54600", "1", "0.1", true],
+  ["other-biogas", "其他氣體生質燃料", "Other Biogas", "氣體生質燃料", "54600", "1", "0.1", true],
+  ["municipal-wastes-biomass-fraction", "都市廢棄物 - 生質部分", "Municipal Wastes (biomass fraction)", "其他非石化燃料", "100000", "30", "4", true],
+];
+
+/** 附表四的含氟氣體（「<1」僅需定性者不收）。[slug, 中文名, 縮寫或英文名, 化學式, 類別, GWP] */
+const FLUORINATED_GWP: [string, string, string, string, string, string][] = [
+  ["hfc-23", "三氟甲烷", "HFC-23", "CHF3", "HFCs", "12400"],
+  ["hfc-32", "二氟甲烷", "HFC-32", "CH2F2", "HFCs", "677"],
+  ["hfc-41", "一氟甲烷", "HFC-41", "CH3F", "HFCs", "116"],
+  ["hfc-125", "1,1,1,2,2-五氟乙烷", "HFC-125", "CHF2CF3", "HFCs", "3170"],
+  ["hfc-134", "1,1,2,2-四氟乙烷", "HFC-134", "CHF2CHF2", "HFCs", "1120"],
+  ["hfc-134a", "1,1,1,2-四氟乙烷", "HFC-134a", "CH2FCF3", "HFCs", "1300"],
+  ["hfc-143", "1,1,2-三氟乙烷", "HFC-143", "CH2FCHF2", "HFCs", "328"],
+  ["hfc-143a", "1,1,1-三氟乙烷", "HFC-143a", "CH3CF3", "HFCs", "4800"],
+  ["hfc-152", "1,2-二氟乙烷", "HFC-152", "CH2FCH2F", "HFCs", "16"],
+  ["hfc-152a", "1,1-二氟乙烷", "HFC-152a", "CH3CHF2", "HFCs", "138"],
+  ["hfc-161", "一氟乙烷", "HFC-161", "CH3CH2F", "HFCs", "4"],
+  ["hfc-227ca", "1,1,1,2,2,3,3-七氟丙烷", "HFC-227ca", "CF3CF2CHF2", "HFCs", "2640"],
+  ["hfc-227ea", "1,1,1,2,3,3,3-七氟丙烷", "HFC-227ea", "CF3CHFCF3", "HFCs", "3350"],
+  ["hfc-236cb", "1,1,1,2,2,3-六氟丙烷", "HFC-236cb", "CH2FCF2CF3", "HFCs", "1210"],
+  ["hfc-236ea", "1,1,1,2,3,3-六氟丙烷", "HFC-236ea", "CHF2CHFCF3", "HFCs", "1330"],
+  ["hfc-236fa", "1,1,1,3,3,3-六氟丙烷", "HFC-236fa", "CF3CH2CF3", "HFCs", "8060"],
+  ["hfc-245ca", "1,1,2,2,3-五氟丙烷", "HFC-245ca", "CH2FCF2CHF2", "HFCs", "716"],
+  ["hfc-245cb", "1,1,1,2,2-五氟丙烷", "HFC-245cb", "CF3CF2CH3", "HFCs", "4620"],
+  ["hfc-245ea", "1,1,2,3,3-五氟丙烷", "HFC-245ea", "CHF2CHFCHF2", "HFCs", "235"],
+  ["hfc-245eb", "1,1,1,2,3-五氟丙烷", "HFC-245eb", "CH2FCHFCF3", "HFCs", "290"],
+  ["hfc-245fa", "1,1,1,3,3-五氟丙烷", "HFC-245fa", "CHF2CH2CF3", "HFCs", "858"],
+  ["hfc-263fb", "1,1,1-三氟丙烷", "HFC-263fb", "CH3CH2CF3", "HFCs", "76"],
+  ["hfc-272ca", "2,2-二氟丙烷", "HFC-272ca", "CH3CF2CH3", "HFCs", "144"],
+  ["hfc-329p", "1,1,1,2,2,3,3,4,4-九氟丁烷", "HFC-329p", "CHF2CF2CF2CF3", "HFCs", "2360"],
+  ["hfc-365mfc", "1,1,1,3,3-五氟丁烷", "HFC-365mfc", "CH3CF2CH2CF3", "HFCs", "804"],
+  ["hfc-43-10mee", "1,1,1,2,2,3,4,5,5,5-十氟戊烷", "HFC-43-10mee", "CF3CHFCHFCF2CF3", "HFCs", "1650"],
+  ["z-hfc-1336", "（順）1,1,1,3,3,3-六氟2-丁烯", "(Z)-HFC-1336", "CF3CH=CHCF3(Z)", "HFCs", "2"],
+  ["nitrogen-trifluoride", "三氟化氮", "Nitrogen trifluoride", "NF3", "PFCs 及其他全氟化物", "16100"],
+  ["sulphur-hexafluoride", "六氟化硫", "Sulphur hexafluoride", "SF6", "PFCs 及其他全氟化物", "23500"],
+  ["trifluoromethyl-sulphur-pentafluoride", "三氟甲基五氟化硫（(Trifluoromethyl） sulphur pentafluoride）", "三氟甲基五氟化硫（(Trifluoromethyl） sulphur pentafluoride）", "SF5CF3", "PFCs 及其他全氟化物", "17400"],
+  ["sulphuryl-fluoride", "硫醯氟", "Sulphuryl fluoride", "SO2F2", "PFCs 及其他全氟化物", "4090"],
+  ["pfc-14", "四氟化碳", "PFC-14", "CF4", "PFCs 及其他全氟化物", "6630"],
+  ["pfc-116", "六氟乙烷", "PFC-116", "C2F6", "PFCs 及其他全氟化物", "11100"],
+  ["pfc-c216", "PFC-c216", "PFC-c216", "c-C3F6", "PFCs 及其他全氟化物", "9200"],
+  ["pfc-218", "全氟丙烷", "PFC-218", "C3F8", "PFCs 及其他全氟化物", "8900"],
+  ["pfc-318", "八氟環丁烷", "PFC-318", "c-C4F8", "PFCs 及其他全氟化物", "9540"],
+  ["pfc-31-10", "全氟丁烷", "PFC-31-10", "C4F10", "PFCs 及其他全氟化物", "9200"],
+  ["perfluorocyclopentene", "全氟環戊烯", "Perfluorocyclopentene", "c-C5F8", "PFCs 及其他全氟化物", "2"],
+  ["pfc-41-12", "全氟戊烷", "PFC-41-12", "n-C5F12", "PFCs 及其他全氟化物", "8550"],
+  ["pfc-51-14", "全氟己烷", "PFC-51-14", "n-C6F14", "PFCs 及其他全氟化物", "7910"],
+  ["pfc-61-16", "全氟庚烷", "PFC-61-16", "n-C7F16", "PFCs 及其他全氟化物", "7820"],
+  ["pfc-71-18", "全氟辛烷", "PFC-71-18", "C8F18", "PFCs 及其他全氟化物", "7620"],
+  ["pfc-91-18", "全氟萘烷", "PFC-91-18", "C10F18", "PFCs 及其他全氟化物", "7190"],
+  ["perfluorodecalin-cis", "順式全氟萘烷", "Perfluorodecalin (cis)", "Z-C10F18", "PFCs 及其他全氟化物", "7240"],
+  ["perfluorodecalin-trans", "反式全氟萘烷", "Perfluorodecalin (trans)", "E-C10F18", "PFCs 及其他全氟化物", "6290"],
+  ["perfluorobut-2-ene", "2-全氟丁烯", "Perfluorobut-2-ene", "CF3CF=CFCF3", "PFCs 及其他全氟化物", "2"],
+];
+
+/**
+ * 附表三「冷凍及空調」的排放係數：設備初始填充量的百分比／年。官方給的是範圍，不是單一數值，
+ * 所以計算時逸散率由使用者提供，這張表只用來提示與檢查。[下限, 上限]。
+ */
+export const REFRIGERATION_EQUIPMENT = {
+  household_refrigeration: { name: "家用的冷凍、冷藏裝備", initial: ["0.2", "1"], operating: ["0.1", "0.5"] },
+  standalone_commercial_refrigeration: { name: "獨立商用的冷凍、冷藏裝備", initial: ["0.5", "3"], operating: ["1", "15"] },
+  medium_large_commercial_refrigeration: { name: "中、大型的冷凍、冷藏裝備", initial: ["0.5", "3"], operating: ["10", "35"] },
+  transport_refrigeration: { name: "運輸用的冷凍、冷藏裝備", initial: ["0.2", "1"], operating: ["15", "50"] },
+  industrial_refrigeration: { name: "工業冷凍、冷藏裝備，包括食品加工及冷藏", initial: ["0.5", "3"], operating: ["7", "25"] },
+  chiller: { name: "冰水機", initial: ["0.2", "1"], operating: ["2", "15"] },
+  residential_commercial_ac: { name: "住宅及商業建築空調", initial: ["0.2", "1"], operating: ["1", "10"] },
+  mobile_ac: { name: "車輛空調冷媒", initial: ["0.2", "0.5"], operating: ["10", "20"] },
+} as const;
+
+export type RefrigerationEquipment = keyof typeof REFRIGERATION_EQUIPMENT;
+
+/** HFC-134a 的冷媒編號就是 R-134a；非 HFC 的氣體沒有這種對應。 */
+const refrigerantAliases = (abbr: string): string[] => {
+  const m = /^HFC-(.+)$/.exec(abbr);
+  return m ? [`R-${m[1]}`, `R${m[1]}`] : [];
+};
+
+const GWP_FACTORS: Factor[] = FLUORINATED_GWP.map(([slug, zh, abbr, formula, family, gwp]): Factor => ({
+  id: `moenv-gwp-2024-${slug}`,
+  source_id: "moenv-ghg-factors",
+  document_id: "moenv-ghg-1130205",
+  source_record_id: `附表四/${abbr}`,
+  name: zh === abbr ? abbr : `${zh}（${abbr}）`,
+  name_en: abbr,
+  aliases: [abbr, formula, ...refrigerantAliases(abbr), "冷媒", "refrigerant"],
+  category: "refrigerant",
+  factor_type: "fugitive_emission",
+  variant: family,
+  gas_basis: "CO2e",
+  value: gwp,
+  components: null,
+  numerator_unit: "kg",
+  denominator_unit: "kg",
+  original_unit: "溫暖化潛勢（GWP）",
+  reference_year: null,
+  announcement_year: 2024,
+  announcement_date: "2024-02-05",
+  effective_from: "2024-02-05",
+  effective_to: null,
+  scope: "直接排放（逸散）",
+  lifecycle_boundary: "該氣體逸散到大氣的排放，以溫暖化潛勢換算為 CO2e。",
+  boundary_basis: "stated",
+  methodology: "排放量 = 逸散量 × 溫暖化潛勢。以設備填充量估算時：逸散量 = 填充量 × 年逸散率。溫暖化潛勢採公告附表四（IPCC AR5）。",
+  gwp_version: "AR5",
+  calculability: "direct",
+  usage_notes: [
+    "數值是溫暖化潛勢（GWP），活動數據是「逸散到大氣的氣體質量」，不是設備的填充量。",
+    "計算時必須說明數量是實際逸散（補充）量，還是設備填充量；以填充量計算需另外提供年逸散率。",
+    "官方附表三只提供各類設備逸散率的範圍，沒有單一預設值，本服務不會代為選定逸散率。",
+    "附表四只列純物質。R-410A、R-407C 這類混合冷媒不在表內，需依成分比例拆成各成分分別計算；成分比例請自行確認，本服務不提供。",
+  ],
+  source_url: "https://ghgregistry.moenv.gov.tw/epa_ghg/Downloads/FileDownloads.aspx?Type_ID=1",
+  original: { 附表: "附表四、溫暖化潛勢", 名稱: zh, 縮寫: abbr, 化學式: formula, 溫暖化潛勢: gwp },
+}));
+
 const MOBILE_GASOLINE_NOTE = "移動燃燒的車用汽油依控制技術有三組 CH4、N2O 係數，請依車輛實際情況選擇，官方沒有指定預設。";
 
 const FUEL_FACTORS: Factor[] = [
@@ -386,6 +552,12 @@ const FUEL_FACTORS: Factor[] = [
   fuel("stationary", "residual-fuel-oil", "燃料油", "Residual Fuel Oil", ["燃料油", "重油", "fuel oil"], "77400", "3", "0.6"),
   fuel("stationary", "lpg", "液化石油氣", "Liquefied Petroleum Gases", ["液化石油氣", "LPG", "桶裝瓦斯"], "63100", "1", "0.1"),
   fuel("stationary", "natural-gas", "天然氣", "Natural Gas", ["天然氣", "natural gas", "瓦斯"], "56100", "1", "0.1"),
+  ...OTHER_STATIONARY_FUELS.map(([slug, name, en, group, co2, ch4, n2o, biogenic]) =>
+    fuel("stationary", slug, name, en, [name, en, ...(group ? [group] : [])], co2, ch4, n2o, [
+      ...(biogenic ? [BIOGENIC_NOTE] : []),
+      ...(slug === "natural-gas-liquids-ngls" ? ["官方中文名稱是「液化天然氣」，英譯為 Natural Gas Liquids (NGLs)，不是 LNG。"] : []),
+    ], biogenic),
+  ),
   fuel("mobile", "motor-gasoline-uncontrolled", "車用汽油-未控制", "Motor Gasoline - Uncontrolled", ["汽油", "車用汽油", "gasoline", "petrol"], "69300", "33", "3.2", [MOBILE_GASOLINE_NOTE]),
   fuel("mobile", "motor-gasoline-oxidation-catalyst", "車用汽油-氧化觸媒", "Motor Gasoline - Oxidation Catalyst", ["汽油", "車用汽油", "gasoline", "petrol"], "69300", "25", "8", [MOBILE_GASOLINE_NOTE]),
   fuel("mobile", "motor-gasoline-low-mileage-ldv-1995", "車用汽油-1995年後之低里程輕型車輛", "Motor Gasoline - Low Mileage Light Duty Vehicle Vintage 1995 or Later", ["汽油", "車用汽油", "gasoline", "petrol"], "69300", "3.8", "5.7", [MOBILE_GASOLINE_NOTE]),
@@ -393,7 +565,7 @@ const FUEL_FACTORS: Factor[] = [
   fuel("mobile", "lpg", "液化石油氣", "Liquefied Petroleum Gases", ["液化石油氣", "LPG"], "63100", "62", "0.2"),
 ];
 
-export const FACTORS: Factor[] = [...ELEC_FACTORS, ...WATER_FACTORS, ...FUEL_FACTORS];
+export const FACTORS: Factor[] = [...ELEC_FACTORS, ...WATER_FACTORS, ...FUEL_FACTORS, ...GWP_FACTORS];
 
 /** 公告附表四的溫暖化潛勢（IPCC AR5）。燃燒排放的 CH4 用 28，與盤查作業指引 113 年版的算例一致。 */
 export const GWP_AR5 = { CO2: "1", CH4: "28", N2O: "265" } as const;

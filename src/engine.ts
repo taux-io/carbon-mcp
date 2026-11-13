@@ -8,7 +8,7 @@
  */
 import Big from "big.js";
 
-import { GWP_AR5, TJ_PER_KCAL } from "./data/reviewed";
+import { GWP_AR5, REFRIGERATION_EQUIPMENT, TJ_PER_KCAL, type RefrigerationEquipment } from "./data/reviewed";
 import type { Gas, StoredFactor } from "./types";
 import { convert, resolveUnit, UnitError } from "./units";
 
@@ -25,6 +25,8 @@ export type CalcErrorCode =
   | "not_calculable"
   | "missing_heating_value"
   | "invalid_heating_value"
+  | "missing_refrigerant_basis"
+  | "invalid_leak_rate"
   | "factor_not_found";
 
 export interface CalcError {
@@ -44,7 +46,16 @@ export interface CalcInput {
   quantity_unit: string;
   /** 活動發生的年度。有給就必須與係數的適用年度相符。 */
   year?: number;
-  context?: { lower_heating_value?: HeatingValue };
+  context?: { lower_heating_value?: HeatingValue; refrigerant?: RefrigerantBasis };
+}
+
+export interface RefrigerantBasis {
+  /** leaked_amount：數量就是逸散（補充）量。charge：數量是設備填充量，需另給年逸散率。 */
+  basis: "leaked_amount" | "charge";
+  /** 年逸散率（%）。basis 為 charge 時必填。 */
+  leak_rate_percent?: string | number;
+  /** 設備類型。有給就會附上官方附表三的逸散率範圍，並指出所給的逸散率是否落在範圍內。 */
+  equipment_type?: RefrigerationEquipment;
 }
 
 export interface GasBreakdown {
@@ -53,6 +64,8 @@ export interface GasBreakdown {
   gwp: string;
   emissions_kg: string;
   emissions_kg_co2e: string;
+  /** 生質燃料的 CO2：單獨表列，不計入排放總量。 */
+  excluded_from_total?: boolean;
 }
 
 export interface CalcResult {
@@ -82,7 +95,12 @@ export interface CalcResult {
   /** 排放量的氣體基礎：CO2e 或 CO2。兩者不可相加。 */
   emissions_gas_basis: string;
   breakdown?: GasBreakdown[];
-  user_supplied?: { lower_heating_value: { value: string; unit: string; note: string } };
+  /** 生質燃料燃燒的 CO2（kg），單獨表列，未計入 emissions_kg。 */
+  biogenic_co2_kg?: string;
+  user_supplied?: {
+    lower_heating_value?: { value: string; unit: string; note: string };
+    refrigerant_leak?: { basis: string; leak_rate_percent: string | null; equipment_type: string | null; note: string };
+  };
   calculated_at: string;
   limitations: string[];
   disclaimer: string;
@@ -96,7 +114,8 @@ const fail = (code: CalcErrorCode, message: string, details?: Record<string, unk
 const DECIMAL = /^\d+(\.\d+)?$/;
 
 /** 把輸入解析成非負的精確十進位。數字先轉成字串（JS 對 0.1 這類值的最短表示是穩定的）。 */
-function parseDecimal(input: string | number): Big | null {
+function parseDecimal(input: string | number | undefined): Big | null {
+  if (input === undefined) return null;
   const text = typeof input === "number" ? (Number.isFinite(input) ? String(input) : "") : input.trim().replace(/,/g, "");
   if (!DECIMAL.test(text)) return null;
   return new Big(text);
@@ -160,6 +179,7 @@ export function calculate(
   if (yearError) return yearError;
 
   try {
+    if (factor.factor_type === "fugitive_emission") return fugitive(factor, quantity, input, now);
     return factor.calculability === "needs_heating_value"
       ? combustion(factor, quantity, input, now)
       : direct(factor, quantity, input, now);
@@ -242,9 +262,11 @@ function combustion(factor: StoredFactor, quantity: Big, input: CalcInput, now: 
       gwp,
       emissions_kg: plain(gasKg),
       emissions_kg_co2e: plain(gasKg.times(gwp)),
+      ...(c.biogenic ? { excluded_from_total: true } : {}),
     };
   });
-  const kg = breakdown.reduce((sum, b) => sum.plus(b.emissions_kg_co2e), new Big(0));
+  const kg = breakdown.filter((b) => !b.excluded_from_total).reduce((sum, b) => sum.plus(b.emissions_kg_co2e), new Big(0));
+  const biogenic = breakdown.find((b) => b.excluded_from_total);
 
   return {
     ok: true,
@@ -255,6 +277,7 @@ function combustion(factor: StoredFactor, quantity: Big, input: CalcInput, now: 
     emissions_t: plain(kg.times("0.001")),
     emissions_gas_basis: "CO2e",
     breakdown,
+    ...(biogenic ? { biogenic_co2_kg: biogenic.emissions_kg } : {}),
     user_supplied: {
       lower_heating_value: {
         value: plain(lhvValue),
@@ -263,7 +286,81 @@ function combustion(factor: StoredFactor, quantity: Big, input: CalcInput, now: 
       },
     },
     calculated_at: now.toISOString(),
-    limitations: factor.usage_notes,
+    limitations: [
+      ...(biogenic ? [`生質燃料的 CO2（${biogenic.emissions_kg} kg）已單獨表列於 biogenic_co2_kg，未計入排放量。`] : []),
+      ...factor.usage_notes,
+    ],
+    disclaimer: DISCLAIMER,
+  };
+}
+
+/**
+ * 含氟氣體的逸散（冷媒等）：逸散量 × 溫暖化潛勢。
+ * 係數的活動數據是「逸散到大氣的質量」。使用者手上通常只有設備填充量，把填充量直接當逸散量
+ * 會高估數十倍，所以這裡要求明說數量是哪一種，不替使用者假設。
+ */
+function fugitive(factor: StoredFactor, quantity: Big, input: CalcInput, now: Date): CalcResult | CalcError {
+  const r = input.context?.refrigerant;
+  const equipmentList = Object.entries(REFRIGERATION_EQUIPMENT).map(([id, e]) => ({ equipment_type: id, name: e.name, operating_percent_per_year: e.operating }));
+  if (!r) {
+    return fail(
+      "missing_refrigerant_basis",
+      "請在 context.refrigerant.basis 說明數量是哪一種：leaked_amount（實際逸散或補充的量），或 charge（設備填充量，需另給年逸散率 leak_rate_percent）。本服務不會假設，因為把填充量當成逸散量會嚴重高估。",
+      { factor_id: factor.id, required: "context.refrigerant.basis", official_leak_rate_ranges: equipmentList },
+    );
+  }
+  const unit = resolveUnit(input.quantity_unit, "kg");
+  const mass = convert(quantity, unit, "kg");
+
+  let leaked = mass;
+  let rate: Big | null = null;
+  const notes: string[] = [];
+  if (r.basis === "charge") {
+    rate = parseDecimal(r.leak_rate_percent);
+    if (!rate || rate.eq(0) || rate.gt(100)) {
+      return fail(
+        "invalid_leak_rate",
+        "以設備填充量計算時，必須提供年逸散率 leak_rate_percent（大於 0、不超過 100 的百分比）。官方附表三只提供各類設備的範圍，沒有單一預設值，請依設備實際情況提供。",
+        { official_leak_rate_ranges: equipmentList },
+      );
+    }
+    leaked = mass.times(rate).times("0.01");
+    if (r.equipment_type) {
+      const e = REFRIGERATION_EQUIPMENT[r.equipment_type];
+      const within = rate.gte(e.operating[0]) && rate.lte(e.operating[1]);
+      notes.push(
+        `官方附表三「${e.name}」的運行排放範圍是每年 ${e.operating[0]}% 至 ${e.operating[1]}%；所給的 ${plain(rate)}% ${within ? "在範圍內" : "不在這個範圍內，請確認依據"}。`,
+      );
+    } else {
+      notes.push("未指定設備類型，沒有與官方附表三的逸散率範圍比對。");
+    }
+  }
+  const kg = leaked.times(factor.value!);
+
+  return {
+    ok: true,
+    activity: { quantity: plain(quantity), unit, converted_quantity: plain(leaked), converted_unit: "kg" },
+    factor: factorSummary(factor),
+    formula:
+      rate === null
+        ? `逸散量 ${plain(leaked)} kg × GWP ${factor.value} = ${plain(kg)} kgCO2e`
+        : `填充量 ${plain(mass)} kg × 年逸散率 ${plain(rate)}% × GWP ${factor.value} = ${plain(kg)} kgCO2e`,
+    emissions_kg: plain(kg),
+    emissions_t: plain(kg.times("0.001")),
+    emissions_gas_basis: "CO2e",
+    user_supplied: {
+      refrigerant_leak: {
+        basis: r.basis,
+        leak_rate_percent: rate === null ? null : plain(rate),
+        equipment_type: r.equipment_type ?? null,
+        note:
+          rate === null
+            ? "數量由使用者聲明為實際逸散（補充）量。"
+            : "年逸散率由使用者提供，不是官方的單一數值；結果的正確性取決於這個數值。",
+      },
+    },
+    calculated_at: now.toISOString(),
+    limitations: [...notes, ...factor.usage_notes],
     disclaimer: DISCLAIMER,
   };
 }

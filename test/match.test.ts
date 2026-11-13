@@ -141,6 +141,20 @@ describe("specific versus general wording", () => {
   });
 });
 
+describe("refrigerants", () => {
+  it("maps air conditioning to refrigerant GWP factors and asks which refrigerant and on what basis", async () => {
+    const m = await match("辦公室冷氣冷媒補充", { unit: "kg" });
+    expect(m.candidates.every((c) => c.factor.factor_type === "fugitive_emission")).toBe(true);
+    expect(m.total_candidates).toBe(46);
+    expect(m.questions_to_resolve.join()).toContain("哪一種冷媒");
+    expect(m.candidates[0].next_step).toContain("optional_context.refrigerant");
+  });
+
+  it("narrows to the named refrigerant", async () => {
+    expect(names(await match("R-32"))).toEqual(["二氟甲烷（HFC-32）"]);
+  });
+});
+
 describe("no match", () => {
   it("says so instead of offering something unrelated", async () => {
     const r = await matchActivity(db, { description: "員工旅遊住宿" });

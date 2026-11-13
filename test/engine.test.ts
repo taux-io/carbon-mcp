@@ -89,7 +89,7 @@ describe("fuel combustion", () => {
     );
     const tonnes = Object.fromEntries(r.breakdown!.map((b) => [b.gas, new Big(b.emissions_kg_co2e).div(1000).toFixed(4)]));
     expect(tonnes).toEqual({ CO2: "46.1353", CH4: "0.0523", N2O: "0.0990" });
-    expect(r.user_supplied?.lower_heating_value.value).toBe("8500");
+    expect(r.user_supplied?.lower_heating_value?.value).toBe("8500");
   });
 
   // 同一頁的天然氣算例：94.6467 千立方公尺、8,845 kcal/m³ → 196.6294 + 0.0981 + 0.0929。
@@ -109,6 +109,69 @@ describe("fuel combustion", () => {
   it("does not apply the 2024 announcement to earlier years", () => {
     const e = err(calculate(diesel, { quantity: 1, quantity_unit: "L", year: 2020, context: { lower_heating_value: { value: 8500, unit: "kcal/L" } } }, NOW));
     expect(e.code).toBe("factor_not_effective");
+  });
+});
+
+describe("refrigerant leakage", () => {
+  const r134a = stored("moenv-gwp-2024-hfc-134a");
+  const calc = (quantity: number | string, refrigerant?: object, unit = "kg") =>
+    calculate(r134a, { quantity, quantity_unit: unit, context: refrigerant ? { refrigerant: refrigerant as never } : undefined }, NOW);
+
+  it("refuses to guess whether the quantity is the charge or the amount leaked", () => {
+    const e = err(calc(10));
+    expect(e.code).toBe("missing_refrigerant_basis");
+    expect(JSON.stringify(e.details)).toContain("residential_commercial_ac");
+  });
+
+  it("multiplies a leaked amount by the GWP", () => {
+    const r = ok(calc(2, { basis: "leaked_amount" }));
+    expect(r.emissions_kg).toBe("2600");
+    expect(r.formula).toContain("GWP 1300");
+  });
+
+  it("applies the user's leak rate to a charge and never a default", () => {
+    const r = ok(calc(40, { basis: "charge", leak_rate_percent: 5, equipment_type: "residential_commercial_ac" }));
+    expect(r.emissions_kg).toBe("2600");
+    expect(r.activity.converted_quantity).toBe("2");
+    expect(r.user_supplied?.refrigerant_leak).toMatchObject({ basis: "charge", leak_rate_percent: "5" });
+    expect(r.limitations[0]).toContain("1% 至 10%");
+    expect(r.limitations[0]).toContain("在範圍內");
+    expect(err(calc(40, { basis: "charge" })).code).toBe("invalid_leak_rate");
+  });
+
+  it("flags a leak rate outside the official range for that equipment without rejecting it", () => {
+    const r = ok(calc(40, { basis: "charge", leak_rate_percent: 30, equipment_type: "residential_commercial_ac" }));
+    expect(r.emissions_kg).toBe("15600");
+    expect(r.limitations[0]).toContain("不在這個範圍內");
+  });
+
+  it.each([0, 101, "abc", -5])("rejects a leak rate of %s", (rate) => {
+    expect(err(calc(40, { basis: "charge", leak_rate_percent: rate })).code).toBe("invalid_leak_rate");
+  });
+
+  it("converts grams and refuses litres", () => {
+    expect(ok(calc(500, { basis: "leaked_amount" }, "g")).emissions_kg).toBe("650");
+    expect(err(calc(1, { basis: "leaked_amount" }, "L")).code).toBe("incompatible_unit");
+  });
+});
+
+describe("biomass fuels", () => {
+  it("reports biogenic CO2 separately and leaves it out of the total", () => {
+    const r = ok(
+      calculate(stored("moenv-ghg-2024-stationary-biodiesels"), { quantity: 1000, quantity_unit: "L", context: { lower_heating_value: { value: 8000, unit: "kcal/L" } } }, NOW),
+    );
+    const co2 = r.breakdown!.find((b) => b.gas === "CO2")!;
+    expect(co2.excluded_from_total).toBe(true);
+    expect(r.biogenic_co2_kg).toBe(co2.emissions_kg);
+    const counted = r.breakdown!.filter((b) => b.gas !== "CO2").reduce((sum, b) => sum.plus(b.emissions_kg_co2e), new Big(0));
+    expect(r.emissions_kg).toBe(counted.toFixed());
+    expect(new Big(r.emissions_kg).lt(co2.emissions_kg)).toBe(true);
+  });
+
+  it("still counts fossil CO2 in the total", () => {
+    const r = ok(calculate(stored("moenv-ghg-2024-stationary-diesel"), { quantity: 1000, quantity_unit: "L", context: { lower_heating_value: { value: 8500, unit: "kcal/L" } } }, NOW));
+    expect(r.biogenic_co2_kg).toBeUndefined();
+    expect(r.breakdown!.every((b) => !b.excluded_from_total)).toBe(true);
   });
 });
 
