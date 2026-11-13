@@ -1,18 +1,18 @@
 # 交接紀錄
 
-寫於 2026-11-13，0.2.3 發布之後。這份文件記錄這一輪做了什麼、目前的狀態、以及接下來可以做的事。專案的規則與架構在 `CLAUDE.md`，部署與發版流程在 `docs/deployment.md`，這裡不重複。
+寫於 2026-11-13，0.2.3 發布之後；狀態表已更新到 0.2.4 部署之後。這份文件記錄這一輪做了什麼、目前的狀態、以及接下來可以做的事。專案的規則與架構在 `CLAUDE.md`，部署與發版流程在 `docs/deployment.md`，這裡不重複。
 
 ## 目前狀態
 
 | 項目 | 狀態 |
 |---|---|
-| 正式環境 | `https://carbon.taux.io`，`/health` 回報 0.2.3，資料庫正常 |
-| 分支 | `main`，本機與 `origin/main` 相同。正式環境跑的是 `d081d79`，之後的 commit 只改文件 |
-| Tag | `v0.2.3` 已推送 |
-| 官方 MCP Registry | `io.github.taux-io/carbon-mcp` 最新版本 0.2.3，`check-registry` 回報與 `server.json` 一致 |
+| 正式環境 | `https://carbon.taux.io`，`/health` 回報 0.2.4，資料庫正常 |
+| 分支 | `main`，本機與 `origin/main` 相同。正式環境跑的是 `934133f`（0.2.4），之後的 commit 只改文件 |
+| Tag | `v0.2.4` 已推送 |
+| 官方 MCP Registry | `io.github.taux-io/carbon-mcp` 最新版本仍是 0.2.3。`v0.2.4` 的 `publish-mcp` 正等待 `mcp-registry` environment 核准，核准後才會發布 |
 | 排程 | `30 19 * * *`（台灣時間 03:30），只有這一條 |
-| 測試 | 8 個檔案、227 項通過；`main` 的 CI 通過 |
-| 每日檢查 | 沒有未關閉的 `production-check` issue |
+| 測試 | 8 個檔案、238 項通過；`main` 的 CI 通過 |
+| 每日檢查 | 0.2.4 部署後手動觸發一次，通過；沒有未關閉的 `production-check` issue |
 
 ## 這一輪做了什麼
 
@@ -30,6 +30,7 @@
 ## 這一輪學到的事
 
 - **改 `src/data/reviewed.ts` 的任何欄位都會讓係數升版本**，包括說明文字。而且部署當下不會生效，要等排程跑過。要立刻生效可以用 `npx wrangler deploy --triggers "* * * * *"` 暫時改排程，等匯入完成後再 `npx wrangler deploy` 改回。這會動到正式環境，每次都要先取得確認。整個過程約 6 分鐘，不需要改 `wrangler.jsonc`。
+- **部署要指定 Cloudflare 帳號。** wrangler 登入了三個帳號，`wrangler.jsonc` 沒有寫 `account_id`，非互動模式下 `wrangler deploy` 會失敗。`carbon-mcp` 在「拓思科技股份有限公司」帳號，指令前加 `CLOUDFLARE_ACCOUNT_ID=5164de0801b523f919f7a9eac9bbf9bf`。
 - **MCP 用戶端會快取工具清單。** 部署新的工具說明之後，已連線的用戶端看到的還是舊說明。要確認伺服器實際回什麼，直接對 `/mcp` 送 `tools/list`。
 - **不要把未 commit 的改動留在別的工作階段正在用的工作目錄。** `twse-mcp` 的 sitemap 修正就是這樣被另一個工作階段的 commit 帶走，沒有經過確認就合併上線。之後在共用的工作目錄做事，先開分支或用 worktree。
 - **瀏覽器顯示問題可以用無頭 Chrome 重現。** 透過 CDP 檢查頁面有沒有 `webkit-xml-viewer-source-xml` 這個元素，就知道 Chrome 有沒有用 XML 樹狀檢視。
