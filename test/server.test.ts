@@ -75,6 +75,15 @@ describe.each<Era>(["legacy", "modern"])("MCP (%s protocol)", (era) => {
     expect(tools.every((t) => t.annotations.readOnlyHint && t.inputSchema)).toBe(true);
   });
 
+  // 用戶端靠這段說明決定要不要用這個工具；漏掉的類別，AI 就不會來搜尋。
+  it("names every category it holds in the search tool's description, in both languages", async () => {
+    const r = await rpc("tools/list");
+    const search = (r.result.tools as { name: string; description: string }[]).find((t) => t.name === "search_emission_factors")!;
+    for (const term of ["electricity", "tap water", "fuel combustion", "refrigerant", "product carbon footprint", "電力", "自來水", "燃料燃燒", "冷媒", "產品碳足跡"]) {
+      expect(search.description).toContain(term);
+    }
+  });
+
   it("pings", async () => {
     const { data } = await call("ping");
     expect(data).toMatchObject({ status: "ok", service: "taiwan-carbon-open-data" });

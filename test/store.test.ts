@@ -61,6 +61,18 @@ describe("ministry announcement tables", () => {
     expect(byId("moenv-ghg-2024-stationary-natural-gas-liquids-ngls").usage_notes.join()).toContain("不是 LNG");
   });
 
+  // 混合冷媒可以用 refrigerant_blend 計算。使用限制若仍寫「本服務不提供」，AI 會告訴使用者算不了。
+  it("tells every fluorinated-gas factor's reader that blends go through refrigerant_blend with a user-supplied composition", () => {
+    const gwp = FACTORS.filter((f) => f.factor_type === "fugitive_emission");
+    for (const f of gwp) {
+      const blendNotes = f.usage_notes.filter((n) => n.includes("混合冷媒"));
+      expect(blendNotes).toHaveLength(1);
+      expect(blendNotes[0]).toContain("refrigerant_blend");
+      expect(blendNotes[0]).toContain("沒有內建");
+      expect(blendNotes[0]).not.toContain("本服務不提供");
+    }
+  });
+
   it("holds the fluorinated gases' GWP as published and omits the qualitative-only ones", () => {
     const gwp = FACTORS.filter((f) => f.factor_type === "fugitive_emission");
     expect(gwp.length).toBe(46);
