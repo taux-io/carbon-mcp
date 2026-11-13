@@ -98,27 +98,30 @@ npm run dry-run                       # 確認 Worker 能 bundle
 
 2026-11-13 在開發機上的結果：
 
-- `npm test`：8 個檔案、223 項測試全部通過。
+- `npm test`：8 個檔案、227 項測試全部通過。
 - `npm run typecheck`、`npm run dry-run`：通過。
-- `npm run smoke`（本機 `wrangler dev` 與本機 D1）：19 項檢查全部通過，包含兩個 MCP 協定版本的 `initialize`、`tools/list`、`tools/call`，以及 REST 計算。12,000 kWh 的 2025 年產業用電算出 5,592 kgCO2e，係數 0.466 讀自資料庫。
+- `npm run smoke`（本機 `wrangler dev` 與本機 D1）：24 項檢查全部通過，包含兩個 MCP 協定版本的 `initialize`、`tools/list`、`tools/call`，以及 REST 計算。12,000 kWh 的 2025 年產業用電算出 5,592 kgCO2e，係數 0.466 讀自資料庫。
 - 同一次排程向能源署開放資料 CSV 做了真實的交叉檢查：CSV 的 21 個年度與已審核資料一致。
 - 引擎重現了環境部《溫室氣體排放量盤查作業指引 113 年版》的柴油與天然氣算例，各氣體到小數第四位相符。
 - 以環境部會員金鑰在本機做了真實的 `CFP_P_02` 同步：1,188 筆全部匯入，金鑰沒有出現在狀態端點或日誌。
-- 正式環境：`npm run smoke -- https://carbon.taux.io` 19 項檢查全部通過。第一次排程從 Cloudflare 連上了能源署與環境部，交叉檢查一致，`CFP_P_02` 同步 1,188 筆。
+- 正式環境：`npm run smoke -- https://carbon.taux.io` 24 項檢查全部通過。第一次排程從 Cloudflare 連上了能源署與環境部，交叉檢查一致，`CFP_P_02` 同步 1,188 筆。
+- 透過 claude.ai 的 MCP 連接器對正式環境實際呼叫工具：三個示範問句共六次呼叫，結果與預期一致，包含冷媒缺少計算依據時回 `missing_refrigerant_basis`。紀錄在 [`docs/claude-directory-submission.md`](docs/claude-directory-submission.md) 的「連接器實測紀錄」。
+- 限流有兩層，都實測過：zone 的 WAF 規則擋平行洪水（平行 300 次中 193 次得到 429），Worker 內的限流擋單一連線的失控迴圈。WAF 規則與 `twse-mcp` 共用計數。見 [`docs/deployment.md`](docs/deployment.md) 的「限流」。
+- 網站已用無頭 Chrome 檢查三個語系、手機與桌面寬度、深淺色共 12 種組合（無水平捲動、對比足夠），並目視看過截圖。
+
+正式環境另有每日自動檢查（對照表、冒煙測試、MCP Registry 條目），失敗時會開 issue，見 [`docs/deployment.md`](docs/deployment.md)。
 
 沒有驗證的事：
 
-- 限流有兩層，都實測過：zone 的 WAF 規則擋平行洪水（平行 300 次中 193 次得到 429），Worker 內的限流擋單一連線的失控迴圈。WAF 規則與 `twse-mcp` 共用計數。見 [`docs/deployment.md`](docs/deployment.md) 的「限流」。
-- 網站已用無頭 Chrome 檢查三個語系、手機與桌面寬度、深淺色共 12 種組合（無水平捲動、對比足夠），並目視看過截圖；沒有在實體手機上看過。
-
-正式環境另有每日自動檢查（對照表與冒煙測試），失敗時會開 issue，見 [`docs/deployment.md`](docs/deployment.md)。
-- 沒有用實際的 MCP 客戶端（Claude、Cursor 等）連線測試。
+- AI 用戶端在對話中的行為。連接器實測是直接呼叫工具，而且執行測試的 AI 事先知道流程。全新的對話收到自然語言的問句時會不會自己選對工具、會不會先問缺少的資料，沒有驗證過。
+- Claude 以外的用戶端（ChatGPT、Cursor、Codex）沒有連線測試過。
+- 網站沒有在實體手機上看過。
 
 ## 已完成與未完成
 
 已完成：
 
-- Worker、MCP Server（11 個工具，無狀態，兩個協定版本）、REST API、D1 schema 與 migration。
+- Worker、MCP Server（13 個工具，無狀態，兩個協定版本）、REST API、D1 schema 與 migration。
 - 精確十進位計算引擎：單位檢查、年度規則、燃料熱值路徑、批次合計條件、比較拆解。
 - 係數版本管理：內容改變時保留舊版本，可用 `factor_id` 加 `factor_version` 重現過去的計算。
 - 資料同步：已審核資料匯入、能源署 CSV 交叉檢查、`CFP_P_02` 同步程式與異常防護。
