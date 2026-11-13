@@ -898,7 +898,7 @@ ${copyable(c.ui, MCP_ENDPOINT, "endpoint")}
     .map((s) => `<section>\n${s}\n</section>`)
     .join("\n");
   const footer = `<p>${esc(c.disclaimer.paras[0] ?? "")}</p>
-<p><a href="/tools">${esc(c.disclaimer.links.tools)}</a> · <a href="/api/docs">${esc(c.disclaimer.links.api)}</a> · <a href="/llms.txt">llms.txt</a> · <a href="/llms-full.txt">llms-full.txt</a> · <a href="${REPO}">GitHub</a></p>`;
+<p><a href="/tools">${esc(c.disclaimer.links.tools)}</a> · <a href="/api/docs">${esc(c.disclaimer.links.api)}</a> · <a href="/llms.txt">llms.txt</a> · <a href="/llms-full.txt">llms-full.txt</a> · <a href="/privacy">${esc(PRIVACY_LABEL[me.lang] ?? "Privacy")}</a> · <a href="${REPO}">GitHub</a></p>`;
   return shell({
     lang: me.lang,
     title: c.title,
@@ -918,6 +918,8 @@ ${copyable(c.ui, MCP_ENDPOINT, "endpoint")}
   });
 }
 
+const PRIVACY_LABEL: Record<string, string> = { "zh-Hant-TW": "隱私權政策", en: "Privacy", ja: "プライバシーポリシー" };
+
 function docShell(path: string, title: string, description: string, body: string): string {
   return shell({
     lang: LOCALES.zh.lang,
@@ -930,7 +932,7 @@ function docShell(path: string, title: string, description: string, body: string
     brandHref: "/",
     skip: ZH.ui.skip,
     body: `<div class="wide doc">\n${body}\n</div>`,
-    footer: `<p>${esc(ZH.disclaimer.paras[0] ?? "")}</p><p><a href="/">首頁</a> · <a href="/llms-full.txt">llms-full.txt</a> · <a href="${REPO}">GitHub</a></p>`,
+    footer: `<p>${esc(ZH.disclaimer.paras[0] ?? "")}</p><p><a href="/">首頁</a> · <a href="/llms-full.txt">llms-full.txt</a> · <a href="/privacy">隱私權政策</a> · <a href="${REPO}">GitHub</a></p>`,
   });
 }
 
@@ -1088,6 +1090,74 @@ const INSTALL_TXT = `- Claude (web/desktop): Settings > Connectors > Add custom 
 - Any other client: Streamable HTTP, URL ${MCP_ENDPOINT}. Client menus and plan availability change and are not guaranteed.`;
 
 const PROMPTS_TXT = EN.prompts.map((p) => `- ${p}`).join("\n") + "\n" + ZH.prompts.map((p) => `- ${p}`).join("\n");
+/**
+ * 隱私權政策（/privacy）。送件 Claude Directory 需要它。
+ * 內容必須與實際行為一致：改動日誌、分析、Cookie、出站連線或資料庫儲存的內容時，這一頁要跟著改。
+ * 依據：wrangler.jsonc 的 observability 設定（Workers Logs，上限 7 天）、src 裡僅有的三處 console 輸出、
+ * 以及「向官方來源的連線只發生在排程」這個架構。
+ */
+export const PRIVACY_UPDATED = "2026-11-13";
+
+export const PRIVACY_HTML: string = docShell(
+  "/privacy",
+  "隱私權政策｜台灣碳排係數 MCP",
+  `${SITE_NAME} 的隱私權政策：不需帳號、不設 Cookie、不記錄你問的內容與工具參數；Cloudflare 保存連線中繼資料最長 7 天。`,
+  `<h1>隱私權政策 <span lang="en">Privacy Policy</span></h1>
+<p>最後更新：${PRIVACY_UPDATED}。本服務由 taux.io 開發維運，不是政府官方服務。</p>
+
+<h2>重點</h2>
+<ul>
+<li>不需要帳號，不設定任何 Cookie，網頁上沒有分析或追蹤程式碼。</li>
+<li>本服務的程式不記錄、也不保存你問的內容與 MCP 工具參數。</li>
+<li>Cloudflare 會保存每個請求的連線中繼資料，最長 7 天，只用於排查問題與防止濫用。</li>
+<li>資料庫裡只有政府公開的排放係數與同步紀錄，沒有任何使用者資料。</li>
+</ul>
+
+<h2>我們不收集的資料</h2>
+<ul>
+<li>姓名、電子郵件、帳號：本服務沒有註冊或登入功能。</li>
+<li>你對 AI 說的話：本服務只收到 AI 客戶端送來的工具呼叫，看不到你的對話。</li>
+<li>工具參數與計算內容（例如用電量、冷媒填充量）：計算在請求當下完成後就結束，不寫入資料庫，也不寫入日誌。</li>
+</ul>
+
+<h2>會被保存的資料</h2>
+<ul>
+<li><strong>連線中繼資料。</strong>本服務執行在 Cloudflare Workers 上，並啟用 Workers Logs。每個請求會留下：來源 IP 與由它推估的位置、網路業者、User-Agent 與請求標頭、網址、狀態碼。保存期限最長 7 天，之後由 Cloudflare 自動刪除。</li>
+<li><strong>請求標頭可能包含工具名稱。</strong>較新的 MCP 協定版本會在標頭帶上呼叫的工具名稱。標頭不包含工具參數。</li>
+<li><strong>REST API 的 GET 查詢字串。</strong>以 GET 呼叫 REST API 時，查詢參數（例如搜尋關鍵字、活動描述）是網址的一部分，會出現在上述日誌的網址裡。以 POST 送出的內容與 MCP 的工具參數在請求本文中，不在其內。</li>
+<li><strong>錯誤紀錄。</strong>服務出錯時會記錄工具名稱或 API 路徑，以及錯誤訊息，不含你送出的參數。</li>
+</ul>
+<p>這些資料只用於排查問題與防止濫用，不出售、不分享給第三方，也不用於廣告或建立使用者檔案。</p>
+
+<h2>流量限制</h2>
+<p>為了防止濫用，本服務以來源 IP 限制請求頻率。計數在 Cloudflare 內進行，本服務不另外保存。</p>
+
+<h2>向政府網站的連線</h2>
+<p>你查詢或計算時，本服務只讀自己的資料庫，不會連到任何政府網站。向官方來源同步資料的連線只發生在每日排程，與你的請求無關，不會帶上你的 IP 或任何與你有關的資訊。</p>
+
+<h2>第三方</h2>
+<p>唯一處理你的連線資料的第三方是 Cloudflare（基礎設施供應商）。你使用的 AI 客戶端（例如 Claude、ChatGPT）如何處理你的對話，由該服務自己的隱私權政策規範。</p>
+
+<h2>聯絡</h2>
+<p>對這份政策有疑問，或要回報問題，請到 <a href="${REPO}/issues">${REPO}/issues</a>。</p>
+
+<h2 lang="en">English summary</h2>
+<div lang="en">
+<ul>
+<li>No account is needed, no cookies are set, and the web pages carry no analytics or tracking code.</li>
+<li>The service's code does not log or store what you ask or the arguments of MCP tool calls. Calculations finish within the request and nothing about them is written to the database or the logs.</li>
+<li>Cloudflare Workers Logs keep per-request connection metadata for at most 7 days: source IP and derived location, network, User-Agent and request headers, URL and status code. Headers may include the name of the MCP tool called, never its arguments.</li>
+<li>When the REST API is called with GET, the query string (for example a search keyword or an activity description) is part of the URL and so appears in those logs. POST bodies and MCP tool arguments do not.</li>
+<li>Error records hold the tool name or API path and the error message, not your arguments.</li>
+<li>This data is used only for troubleshooting and abuse prevention. It is never sold, shared, or used for advertising or profiling.</li>
+<li>Requests are rate limited by source IP inside Cloudflare. The service stores no such record itself.</li>
+<li>Looking up or calculating reads only the service's own database. Connections to government sources happen only in a daily scheduled job, unrelated to your request, and carry nothing about you.</li>
+<li>The database holds only public government emission factors and sync records. It holds no user data.</li>
+<li>Contact: <a href="${REPO}/issues">${REPO}/issues</a>.</li>
+</ul>
+</div>`,
+);
+
 export const LLMS_TXT = `# ${SITE_NAME} (Unofficial) / 台灣碳排係數與碳排計算 MCP（非官方）
 
 > ${EN.description}
@@ -1220,6 +1290,10 @@ ${LOCALE_KEYS.map((o) => `    <xhtml:link rel="alternate" hreflang="${LOCALES[o]
     <xhtml:link rel="alternate" hreflang="x-default" href="${SITE_ORIGIN}/"/>
   </url>`,
 ).join("\n")}
+  <url>
+    <loc>${SITE_ORIGIN}/privacy</loc>
+    <lastmod>${PRIVACY_UPDATED}</lastmod>
+  </url>
   <url>
     <loc>${SITE_ORIGIN}/tools</loc>
     <lastmod>${LASTMOD}</lastmod>

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.taux-io/carbon-mcp",
+  "title": "Taiwan Carbon Open Data (Unofficial)",
+  "description": "Unofficial. Taiwan government emission factors for AI: electricity, fuels, refrigerants, inventory.",
+  "version": "0.2.2",
+  "websiteUrl": "https://carbon.taux.io",
+  "repository": {
+    "url": "https://github.com/taux-io/carbon-mcp",
+    "source": "github",
+    "id": "1456045530"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://carbon.taux.io/mcp"
+    }
+  ]
+}

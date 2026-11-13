@@ -98,7 +98,7 @@ npm run dry-run                       # 確認 Worker 能 bundle
 
 2026-11-13 在開發機上的結果：
 
-- `npm test`：7 個檔案、212 項測試全部通過。
+- `npm test`：8 個檔案、223 項測試全部通過。
 - `npm run typecheck`、`npm run dry-run`：通過。
 - `npm run smoke`（本機 `wrangler dev` 與本機 D1）：19 項檢查全部通過，包含兩個 MCP 協定版本的 `initialize`、`tools/list`、`tools/call`，以及 REST 計算。12,000 kWh 的 2025 年產業用電算出 5,592 kgCO2e，係數 0.466 讀自資料庫。
 - 同一次排程向能源署開放資料 CSV 做了真實的交叉檢查：CSV 的 21 個年度與已審核資料一致。
@@ -131,6 +131,10 @@ npm run dry-run                       # 確認 Worker 能 bundle
 - 用水以外的擴充來源（運輸、廢棄物）：沒有找到邊界明確的官方結構化係數，未收錄。
 - 環境部公告的附表二製程與附表三的廢水、廢棄物：它們是公式與參數，不是可直接計算的係數。R-22 與碳氫冷媒不在官方表內，無法計算。
 - 政府檔案（能源署 PDF、環境部公告）的重製授權未能在官方頁面確認。
+
+## 隱私
+
+不需帳號、不設 Cookie、不記錄你問的內容與工具參數。Cloudflare 保存連線中繼資料最長 7 天。完整內容見 <https://carbon.taux.io/privacy> 與 [`PRIVACY.md`](PRIVACY.md)。
 
 ## 授權
 

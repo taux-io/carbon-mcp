@@ -380,7 +380,7 @@ describe("site routes", () => {
     expect((await send(new Request("https://carbon.taux.io/health"), {})).status).toBe(503);
   });
 
-  it.each(["/", "/en", "/ja", "/tools", "/api/docs", "/llms.txt", "/llms-full.txt", "/robots.txt", "/sitemap.xml"])("serves %s with security headers", async (path) => {
+  it.each(["/", "/en", "/ja", "/tools", "/api/docs", "/privacy", "/llms.txt", "/llms-full.txt", "/robots.txt", "/sitemap.xml"])("serves %s with security headers", async (path) => {
     const res = await get(path);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-security-policy")).toContain("default-src 'none'");

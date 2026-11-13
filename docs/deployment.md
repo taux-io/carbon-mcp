@@ -75,6 +75,43 @@ gh workflow run production-check.yml -f base_url=https://carbon.taux.io
 
 這個 workflow 分成兩個 job：執行 repo 程式的 `check` 只有讀取權限；有寫 issue 權限的 `report` 不取出也不執行 repo 裡的程式。
 
+## 發版與送件
+
+### 發版
+
+1. 更新 `package.json` 與 `server.json` 的版本（兩者必須相同，測試會檢查），在 `CHANGELOG.md` 加一節。
+2. `npm test`、`npm run deploy`、`npm run smoke -- https://carbon.taux.io`。
+3. commit 並 push。
+
+### 發布到官方 MCP Registry
+
+`.github/workflows/publish-mcp.yml` 在推送 `v*` tag 時把 `server.json` 發布到 registry。**截至 2026-11-13 尚未發布過。**
+
+```bash
+git tag v0.2.2 origin/main && git push origin v0.2.2
+```
+
+- workflow 會停在 `mcp-registry` environment 等待核准。到 GitHub 的 Actions 頁面核准後才會發布。
+- 這個 environment 只允許 `v*` tag，並要求指定的審核者核准。它擋的是「有人拿到寫入權限就能打 tag，把 registry 上的連線位址改掉」。
+- 認證用 GitHub OIDC，不需要任何長期 secret。命名空間 `io.github.taux-io/*` 由 repo 所在的組織證明。
+- 發布工具 `mcp-publisher` 固定版本並驗證檢查碼。升級時要同時改 workflow 裡的版本與 SHA256。
+- registry 不允許重發同一個版本。要重發就升版。
+- 發布後用 `npm run check-registry` 比對線上條目與 `server.json`。之後可以把它加進每日檢查；現在加會因為條目還不存在而每天失敗。
+
+本機可先驗證：下載同版本的 `mcp-publisher`，在 repo 根目錄執行 `mcp-publisher validate`（2026-11-13 驗證通過）。
+
+### 送件 Claude Directory
+
+送件表單由維護者自己填。已準備好的項目：
+
+- 隱私權政策：<https://carbon.taux.io/privacy>，內容依實際行為撰寫。改動日誌、分析、Cookie、出站連線或資料庫儲存的內容時，這一頁要跟著改；`test/registry.test.ts` 有兩項檢查會在相關程式改變時失敗。
+- 端點：`https://carbon.taux.io/mcp`，Streamable HTTP，不需認證。
+- 所有工具都標示為唯讀（`readOnlyHint`）。
+- 網站圖示：`/favicon.svg`；分享圖：`/og.png`。
+- 原始碼：<https://github.com/taux-io/carbon-mcp>（MIT）。
+
+沒有準備、送件時可能被要求的項目：測試帳號（本服務不需要帳號）、示範影片、客服信箱（目前的聯絡管道是 GitHub issues）。
+
 ## 回復
 
 `npx wrangler rollback` 回到上一個版本。D1 的 schema 變更不會跟著回復；係數資料可由排程從 `src/data/reviewed.ts` 重新匯入。

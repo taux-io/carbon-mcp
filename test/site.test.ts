@@ -45,6 +45,11 @@ describe("homepage", () => {
     }
   });
 
+  it("links the privacy policy from every page and lists it in the sitemap", () => {
+    for (const html of ALL_PAGES) expect(html).toContain('href="/privacy"');
+    expect(SITEMAP_XML).toContain("<loc>https://carbon.taux.io/privacy</loc>");
+  });
+
   it("links the favicon and touch icon on every page", () => {
     for (const html of [...Object.values(PAGES), TOOLS_HTML, API_DOCS_HTML]) {
       expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml">');

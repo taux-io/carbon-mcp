@@ -86,7 +86,9 @@ npm run check-rate-limit                   # 確認正式環境的限流有在�
 
 ## 發版
 
-版本號在 `package.json`，`/health` 與 MCP 的 serverInfo 會回報它。對外行為有變（新增或修改工具、係數資料、計算規則）就升版並在 `CHANGELOG.md` 加一節。新增工具時同時改 `scripts/smoke.mjs` 的工具數，否則每日檢查會開 issue。
+版本號在 `package.json` 與 `server.json`（兩者必須相同，測試會檢查），`/health` 與 MCP 的 serverInfo 會回報它。對外行為有變（新增或修改工具、係數資料、計算規則）就升版並在 `CHANGELOG.md` 加一節。新增工具時同時改 `scripts/smoke.mjs` 的工具數，否則每日檢查會開 issue。發布到官方 MCP Registry 是推送 `v*` tag，流程見 `docs/deployment.md` 的「發版與送件」。
+
+`/privacy` 描述的是實際行為。新增 `console` 輸出、分析程式碼、Cookie、對使用者請求的出站連線，或在資料庫存使用者資料之前，先改隱私權政策（`src/site.ts` 的 `PRIVACY_HTML` 與 `PRIVACY.md`）。
 
 ## 尚未完成
 

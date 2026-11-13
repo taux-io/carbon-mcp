@@ -1,0 +1,66 @@
+name: publish to mcp registry
+
+# 打 `v*` tag 時，把 server.json 發布到官方 MCP Registry。
+#
+# 不建置、不發套件：這是遠端伺服器，registry 條目只有 `remotes` 指向線上端點。
+# 這支 workflow 唯一的工作是把 server.json 送上去。
+#
+# 用 OIDC 而不是 PAT：不需要任何長期 secret，`id-token: write` 換來的是一次性的憑證。
+# job 放在 `mcp-registry` environment 底下：要 required reviewer 核准，而且只有 `v*` tag 能部署。
+# 沒有這道閘門，一個被盜的 write 權限帳號打一個 tag，就能把 server.json 的 remotes[0].url 改掉，
+# 所有從 registry 安裝的人跟著改連線目標。發布後可用 `npm run check-registry` 比對線上條目。
+#
+# 發版步驟見 docs/deployment.md 的「發版與送件」。
+
+on:
+  push:
+    tags: ["v*"]
+  # 手動重發：registry 標示為 preview，官方明說可能有資料重置，屆時不必為了重發硬打一個新 tag。
+  workflow_dispatch:
+
+concurrency:
+  group: publish-mcp
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: mcp-registry
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # tag 是版本的單一來源；server.json 裡的版本只是為了本機驗證與測試而存在。
+      - name: sync version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          jq --arg v "$VERSION" '.version = $v' server.json > server.tmp
+          mv server.tmp server.json
+          echo "server.json version -> $VERSION"
+
+      - name: install mcp-publisher (pinned + verified)
+        env:
+          VERSION: v1.8.1
+          SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+        run: |
+          set -euo pipefail
+          ASSET="mcp-publisher_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$ASSET" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${VERSION}/${ASSET}"
+          echo "${SHA256}  ${ASSET}" | sha256sum -c -
+          tar xzf "$ASSET" mcp-publisher
+          rm -f "$ASSET"
+
+      - name: validate server.json
+        run: ./mcp-publisher validate
+
+      - name: authenticate
+        run: ./mcp-publisher login github-oidc
+
+      - name: publish
+        run: ./mcp-publisher publish
