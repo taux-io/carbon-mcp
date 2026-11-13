@@ -364,6 +364,42 @@ describe("refrigerant blends in batch and compare", () => {
       const noBasis = await compareBlends(single("hfc-32", 10), { ...blend(["hfc-32", 50], ["hfc-125", 50]), quantity: 10, quantity_unit: "kg" });
       expect(noBasis.data.error.details.comparison.code).toBe("missing_refrigerant_basis");
     });
+
+    it("names the CO2 / CO2e mismatch when a CO2 factor is compared with a blend", async () => {
+      const water = { factor_id: "twc-water-2025", quantity: 10, quantity_unit: "m3" };
+      const { data } = await compareBlends(water, blendItem(10, ["hfc-32", 50], ["hfc-125", 50]));
+      expect(data.result).toMatchObject({ method_changed: true, decomposition: null });
+      expect(data.result.method_change_reasons).toContain("氣體基礎不同（CO2 與 CO2e）。");
+    });
+
+    it("does not split the change when one side counts charge and the other the leaked amount", async () => {
+      const charge = { optional_context: { refrigerant: { basis: "charge", leak_rate_percent: 5 } } };
+      const blends = await compareBlends({ ...blendItem(100, ["hfc-32", 50], ["hfc-125", 50]), ...charge }, blendItem(4, ["hfc-32", 50], ["hfc-125", 50]));
+      expect(blends.data.result).toMatchObject({ difference_kg: "-1923.5", method_changed: true, decomposition: null });
+      expect(blends.data.result.method_change_reasons).toContain("冷媒數量的計算依據不同（一邊是設備填充量乘年逸散率，一邊是實際逸散量）。");
+      const singles = await compareBlends({ ...single("hfc-32", 100), ...charge }, single("hfc-32", 4));
+      expect(singles.data.result).toMatchObject({ method_changed: true, decomposition: null });
+      const sameBasis = await compareBlends({ ...single("hfc-32", 100), ...charge }, { ...single("hfc-32", 80), ...charge });
+      expect(sameBasis.data.result).toMatchObject({ method_changed: false, decomposition: { activity_effect_kg: "-677" } });
+      const electricity = { factor_id: "tw-electricity-2024", quantity: 1000, quantity_unit: "kWh" };
+      const unrelated = await compareBlends(electricity, single("hfc-32", 4));
+      expect(unrelated.data.result.method_change_reasons.join("")).not.toContain("計算依據");
+    });
+  });
+
+  describe("factor_version", () => {
+    it("is refused with a blend, in every tool that takes one, instead of silently using the current version", async () => {
+      const pinned = { ...blendItem(10, ["hfc-32", 50], ["hfc-125", 50]), factor_version: 999 };
+      const one = await tool("calculate_emissions", pinned);
+      expect([one.isError, one.data.error.code]).toEqual([true, "invalid_request"]);
+      const batch = await tool("calculate_batch", { items: [pinned, single("hfc-32", 10)] });
+      expect(batch.data.results.map((r: { ok: boolean }) => r.ok)).toEqual([false, true]);
+      expect(batch.data.results[0].error.code).toBe("invalid_request");
+      const cmp = await tool("compare_emissions", { baseline: pinned, comparison: blendItem(10, ["hfc-32", 50], ["hfc-125", 50]) });
+      expect(cmp.data.error.details.baseline.code).toBe("invalid_request");
+      const inv = await tool("build_inventory", { items: [pinned] });
+      expect(inv.data.failed_items[0].error.code).toBe("invalid_request");
+    });
   });
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "carbon-mcp",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Taiwan Carbon Open Data (Unofficial): remote MCP server for Taiwan government emission factors and traceable emission calculations, on Cloudflare Workers. Not affiliated with any government agency.",
   "license": "MIT",
   "type": "module",

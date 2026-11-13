@@ -51,7 +51,7 @@ export const calcShape = {
     .object({ lower_heating_value: heatingValue.optional(), refrigerant: refrigerant.optional() })
     .optional()
     .describe("補充資料。燃料燃燒係數需要 lower_heating_value；冷媒等含氟氣體的逸散需要 refrigerant。"),
-  factor_version: z.number().int().min(1).optional().describe("指定係數版本，用來重現過去的計算。不給就用目前版本。"),
+  factor_version: z.number().int().min(1).optional().describe("指定係數版本，用來重現過去的計算。不給就用目前版本。混合冷媒（refrigerant_blend）不適用，給了會回錯誤。"),
 };
 export const calcSchema = z.object(calcShape);
 

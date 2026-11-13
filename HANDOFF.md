@@ -13,7 +13,7 @@
 | 服務條款 | `https://carbon.taux.io/terms` 已上線（2026-11-13），每一頁頁尾都有連結，sitemap 有收錄 |
 | 含氟氣體係數 | 46 筆都是版本 3（使用限制列出四個接受 `refrigerant_blend` 的工具）；版本 1、2 保留在 `factor_versions` |
 | 排程 | `30 19 * * *`（台灣時間 03:30），只有這一條 |
-| 測試 | 8 個檔案、240 項通過；`main` 的 CI 通過 |
+| 測試 | 8 個檔案、243 項通過；`main` 的 CI 通過 |
 | 每日檢查 | smoke 25 項（含 `/terms`）；2026-11-13 加入 `/terms` 後手動觸發一次，通過；沒有未關閉的 `production-check` issue |
 
 ## 這一輪做了什麼
