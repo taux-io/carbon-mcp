@@ -9,7 +9,7 @@ import {
 } from "./service";
 import { buildInventory } from "./inventory";
 import { matchActivity } from "./match";
-import { batchShape, calcOrBlendSchema, calcSchema, electricityShape, inventoryShape, matchShape, searchShape, toAnyRequest, toInventoryItem } from "./tools";
+import { batchShape, calcOrBlendSchema, electricityShape, inventoryShape, matchShape, searchShape, toAnyRequest, toInventoryItem } from "./tools";
 
 /** 瀏覽器端的跨來源呼叫只開給自己的網站與本機開發；伺服器對伺服器的呼叫不受 CORS 影響。 */
 const ALLOWED_ORIGINS = new Set(["https://carbon.taux.io", "http://localhost:8787", "http://127.0.0.1:8787"]);
@@ -94,15 +94,6 @@ async function jsonBody(request: Request): Promise<unknown | Failure> {
   }
 }
 
-const toRequest = (a: z.infer<typeof calcSchema>) => ({
-  factor_id: a.factor_id,
-  quantity: a.quantity,
-  quantity_unit: a.quantity_unit,
-  year: a.year,
-  context: a.optional_context,
-  factor_version: a.factor_version,
-});
-
 async function route(request: Request, url: URL, db: D1Database, now: Date): Promise<unknown> {
   const path = url.pathname.replace(/\/+$/, "");
   const get = request.method === "GET" || request.method === "HEAD";
@@ -146,7 +137,7 @@ async function route(request: Request, url: URL, db: D1Database, now: Date): Pro
     const body = await jsonBody(request);
     if (isFailure(body)) return body;
     const p = parse(z.object(batchShape), body);
-    return isFailure(p) ? p : calculateBatch(db, p.items.map(toRequest), now);
+    return isFailure(p) ? p : calculateBatch(db, p.items.map(toAnyRequest), now);
   }
 
   if (path === "/api/v1/inventory" && post) {

@@ -260,17 +260,18 @@ export async function computeBlend(db: D1Database, req: BlendRequest, now: Date)
   return { ok: true, parts: out };
 }
 
-export async function calculateBlend(db: D1Database, req: BlendRequest, now: Date) {
-  const blend = await computeBlend(db, req, now);
-  if (!blend.ok) return blend;
-  const kg = blend.parts.reduce((s, p) => s.plus(p.result.emissions_kg), new Big(0));
-  const weightedGwp = blend.parts.reduce((s, p) => s.plus(new Big(p.mass_percent).times(p.result.factor.value!).times("0.01")), new Big(0));
-  const first = blend.parts[0].result;
+type BlendPart = { mass_percent: string; result: CalcResult };
+
+/** 對外呈現的混合冷媒結果：成分各自的官方係數加上加總。不再查資料庫，只整理形狀。 */
+function presentBlend(req: Pick<BlendRequest, "quantity">, parts: BlendPart[], now: Date) {
+  const kg = parts.reduce((s, p) => s.plus(p.result.emissions_kg), new Big(0));
+  const weightedGwp = parts.reduce((s, p) => s.plus(new Big(p.mass_percent).times(p.result.factor.value!).times("0.01")), new Big(0));
+  const first = parts[0].result;
   return {
     ok: true as const,
     kind: "refrigerant_blend" as const,
     activity: { quantity: parseDecimal(req.quantity)!.toFixed(), unit: first.activity.unit },
-    composition: blend.parts.map((p) => ({
+    composition: parts.map((p) => ({
       factor_id: p.result.factor.id,
       factor_version: p.result.factor.version,
       name: p.result.factor.name,
@@ -282,13 +283,13 @@ export async function calculateBlend(db: D1Database, req: BlendRequest, now: Dat
     })),
     weighted_gwp: weightedGwp.toFixed(),
     weighted_gwp_note: "依使用者提供的成分比例與官方附表四的 GWP 計算而得，不是官方公布的數值。",
-    formula: `${blend.parts.map((p) => `${p.result.activity.converted_quantity} kg × ${p.result.factor.value}`).join(" + ")} = ${kg.toFixed()} kgCO2e`,
+    formula: `${parts.map((p) => `${p.result.activity.converted_quantity} kg × ${p.result.factor.value}`).join(" + ")} = ${kg.toFixed()} kgCO2e`,
     emissions_kg: kg.toFixed(),
     emissions_t: kg.times("0.001").toFixed(),
     emissions_gas_basis: "CO2e",
     user_supplied: {
       composition: {
-        components: blend.parts.map((p) => ({ factor_id: p.result.factor.id, mass_percent: p.mass_percent })),
+        components: parts.map((p) => ({ factor_id: p.result.factor.id, mass_percent: p.mass_percent })),
         note: "成分比例由使用者提供，本服務沒有內建任何冷媒的成分，也沒有查證這個比例；結果的正確性取決於它。",
       },
       ...first.user_supplied,
@@ -303,22 +304,56 @@ export async function calculateBlend(db: D1Database, req: BlendRequest, now: Dat
   };
 }
 
-/** calculate_emissions 的入口：單一係數或混合冷媒，兩者擇一。 */
-export async function calculateAny(db: D1Database, req: Partial<CalcRequest> & Omit<CalcRequest, "factor_id"> & { blend?: BlendComponent[] }, now: Date) {
+export async function calculateBlend(db: D1Database, req: BlendRequest, now: Date) {
+  const blend = await computeBlend(db, req, now);
+  return blend.ok ? presentBlend(req, blend.parts, now) : blend;
+}
+
+/** 單一係數（factor_id）或混合冷媒（blend），兩者擇一。 */
+export type ActivityRequest = Partial<CalcRequest> & Omit<CalcRequest, "factor_id"> & { blend?: BlendComponent[] };
+
+/**
+ * 一筆活動算完的結果：單一係數是一個 CalcResult，混合冷媒是各成分的 CalcResult。
+ * 合計與比較都從這個形狀出發，混合冷媒因此只查詢、計算一次。
+ */
+export type Computed =
+  | { kind: "single"; request: CalcRequest; result: CalcResult }
+  | { kind: "blend"; request: BlendRequest; parts: BlendPart[] };
+
+export async function computeActivity(db: D1Database, req: ActivityRequest, now: Date): Promise<Computed | Failure> {
   if (req.factor_id && req.blend) return fail("invalid_request", "factor_id 與 refrigerant_blend 只能給一個。");
-  if (req.blend) return calculateBlend(db, { ...req, components: req.blend }, now);
+  if (req.blend) {
+    const request = { ...req, components: req.blend };
+    const blend = await computeBlend(db, request, now);
+    return blend.ok ? { kind: "blend", request, parts: blend.parts } : blend;
+  }
   if (!req.factor_id) return fail("invalid_request", "請提供 factor_id；混合冷媒則提供 refrigerant_blend。");
-  return calculateOne(db, { ...req, factor_id: req.factor_id }, now);
+  const request = { ...req, factor_id: req.factor_id };
+  const result = await calculateOne(db, request, now);
+  return result.ok ? { kind: "single", request, result } : result;
+}
+
+const isComputed = (c: Computed | Failure): c is Computed => "kind" in c;
+
+/** 對外的結果：單一係數維持 CalcResult，混合冷媒用 calculateBlend 的形狀。 */
+const present = (c: Computed, now: Date) => (c.kind === "single" ? c.result : presentBlend(c.request, c.parts, now));
+
+const resultsOf = (c: Computed) => (c.kind === "single" ? [c.result] : c.parts.map((p) => p.result));
+
+/** calculate_emissions 的入口：單一係數或混合冷媒，兩者擇一。 */
+export async function calculateAny(db: D1Database, req: ActivityRequest, now: Date) {
+  const c = await computeActivity(db, req, now);
+  return isComputed(c) ? present(c, now) : c;
 }
 
 export const MAX_BATCH = 50;
 
-export async function calculateBatch(db: D1Database, items: CalcRequest[], now: Date) {
-  const results: (CalcResult | Failure)[] = [];
-  for (const item of items.slice(0, MAX_BATCH)) results.push(await calculateOne(db, item, now));
+export async function calculateBatch(db: D1Database, items: ActivityRequest[], now: Date) {
+  const computed: (Computed | Failure)[] = [];
+  for (const item of items.slice(0, MAX_BATCH)) computed.push(await computeActivity(db, item, now));
   return {
-    results: results.map((r, i) => ({ index: i, factor_id: items[i].factor_id, ...r })),
-    total: totalOf(results),
+    results: computed.map((c, i) => ({ index: i, factor_id: items[i].factor_id, ...(isComputed(c) ? present(c, now) : c) })),
+    total: totalOf(computed.flatMap((c): (CalcResult | CalcError)[] => (isComputed(c) ? resultsOf(c) : [c]))),
     attribution: ATTRIBUTION,
     disclaimer: DISCLAIMER,
   };
