@@ -154,6 +154,25 @@ git tag v0.2.2 origin/main && git push origin v0.2.2
 
 本機可先驗證：下載同版本的 `mcp-publisher`，在 repo 根目錄執行 `mcp-publisher validate`（2026-11-13 驗證通過）。
 
+### 發布到 Smithery
+
+同一支 workflow 的第二個 job 在 registry 發布成功後，把 `https://carbon.taux.io/mcp` 發布到 Smithery 的 `taux/carbon`，讓它重新掃描工具。做法照抄 `twse-mcp`（`taux/twse`）。
+
+- 需要 `mcp-registry` environment 裡的 secret `SMITHERY_API_KEY`。它是長期金鑰，只有核准後的 job 讀得到。
+- smithery CLI 的版本與整棵相依樹由 `.github/smithery-cli/package-lock.json` 鎖住，用 `npm ci --ignore-scripts` 安裝。升級時改 `package.json` 再重產 lockfile。
+- Smithery 上的顯示名稱與說明只在 `.github/smithery.json` 維護。每次發布都會用它覆蓋，在 Smithery 網頁上改的會被蓋掉。
+- 只更新 Smithery 不動 registry：`gh workflow run publish-mcp.yml --ref vX.Y.Z -f smithery_only=true`。environment 只允許 `v*` tag，從 `main` 觸發會被拒絕；而且 workflow 檔取自那個 tag，所以只有在加入這個 job 之後打的 tag 上才有效。
+
+**第一次上架。** 加入這個 job 之後還沒有打過 tag，所以第一次要在本機發布：
+
+```bash
+cd .github/smithery-cli && npm ci --ignore-scripts
+SMITHERY_API_KEY=… ./node_modules/.bin/smithery mcp publish https://carbon.taux.io/mcp -n taux/carbon
+curl -fsS -X PATCH "https://api.smithery.ai/servers/taux%2Fcarbon" -H "Authorization: Bearer $SMITHERY_API_KEY" -H "Content-Type: application/json" --data @../smithery.json
+```
+
+`smithery mcp publish` 遇到不存在的伺服器名稱會不會自動建立，官方文件沒有寫明。失敗的話先在 <https://smithery.ai/new> 建立 `taux/carbon`，再重跑。
+
 ### 送件 Claude Directory
 
 送件表單由維護者自己填。已準備好的項目：
