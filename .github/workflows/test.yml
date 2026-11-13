@@ -1,0 +1,26 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          # 測試用 node:sqlite 當 D1 的替身，需要 Node 24 以上。
+          node-version: "24"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      # 測試完全離線（出站 fetch 都是替身），CI 不需要連任何政府網站。
+      - run: npm test
+      # 確認 Worker 能 bundle，壞掉的部署設定在合併前就擋下。
+      - run: npm run dry-run

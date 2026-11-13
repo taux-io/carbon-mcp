@@ -1,0 +1,4 @@
+# 複製成 .dev.vars（已在 .gitignore）。正式環境用 `wrangler secret put MOENV_API_KEY`。
+# 環境部環境資料開放平臺的會員 API Key：https://data.moenv.gov.tw/api-term
+# 沒有設定時，CFP_P_02（碳足跡排放係數）的同步會略過，其他功能不受影響。
+MOENV_API_KEY=

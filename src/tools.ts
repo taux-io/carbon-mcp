@@ -1,0 +1,199 @@
+/**
+ * MCP 工具的定義表。server.ts 用它註冊工具，網站的工具說明與 llms.txt 也從這裡產生，
+ * 所以工具名稱、說明與參數只有這一份。
+ *
+ * 每個工具只是服務層（service.ts）的薄殼：REST API 呼叫的是同一批函式。
+ * 說明文字英文在前、繁體中文在後，寫在同一個字串裡。
+ */
+import { z } from "zod";
+
+import {
+  calculateBatch, calculateOne, compareEmissions, electricity, factorDetail, factorVersions, listDataSources,
+  MAX_BATCH, methodology, METHODOLOGY_TOPICS, ping, search, updateStatus, USAGE_TYPES,
+} from "./service";
+import { MAX_LIMIT } from "./store";
+
+const CATEGORIES = ["electricity", "water", "fuel_combustion", "product_footprint"] as const;
+const FACTOR_TYPES = ["purchased_electricity", "water_supply", "stationary_combustion", "mobile_combustion", "product_carbon_footprint"] as const;
+
+const quantity = z
+  .union([z.number(), z.string()])
+  .describe('活動數據，不小於零。可用數字或十進位字串（字串可避免精度問題），例如 12000 或 "17.495"。');
+
+const heatingValue = z
+  .object({
+    value: z.union([z.number(), z.string()]).describe("低位熱值的數值，例如 8500。"),
+    unit: z.string().describe('單位，寫成 "kcal/L"、"kcal/kg" 或 "kcal/m3"。'),
+  })
+  .describe("低位熱值。燃料燃燒係數必填，必須來自使用者（自行檢測或供應商提供）；官方沒有預設值，請勿自行假設。");
+
+/** 一筆活動的計算參數。calculate_emissions、calculate_batch、compare_emissions 與 REST 共用。 */
+export const calcShape = {
+  factor_id: z.string().min(1).max(120).describe("係數 ID，來自 search_emission_factors 或 get_electricity_factor 的結果。請勿自行猜測。"),
+  quantity,
+  quantity_unit: z.string().min(1).max(20).describe("活動數據的單位，例如 kWh、度、L、公秉、kg、t、m3。「度」在電是 kWh、在水是 m³。"),
+  year: z.number().int().min(1990).max(2100).optional().describe("活動發生的年度（西元）。有給就必須與係數的適用年度相符，不會自動以其他年度代替。"),
+  optional_context: z.object({ lower_heating_value: heatingValue.optional() }).optional().describe("補充資料。燃料燃燒係數需要 lower_heating_value。"),
+  factor_version: z.number().int().min(1).optional().describe("指定係數版本，用來重現過去的計算。不給就用目前版本。"),
+};
+export const calcSchema = z.object(calcShape);
+type CalcArgs = z.infer<typeof calcSchema>;
+
+const toRequest = (a: CalcArgs) => ({
+  factor_id: a.factor_id,
+  quantity: a.quantity,
+  quantity_unit: a.quantity_unit,
+  year: a.year,
+  context: a.optional_context,
+  factor_version: a.factor_version,
+});
+
+export const searchShape = {
+  query: z.string().max(100).optional().describe("關鍵字，繁體中文或英文，例如 電力、柴油、自來水、gasoline。多個關鍵字以空白分隔。"),
+  category: z.enum(CATEGORIES).optional().describe("類別：electricity 電力、water 自來水、fuel_combustion 燃料燃燒、product_footprint 產品碳足跡。"),
+  factor_type: z.enum(FACTOR_TYPES).optional().describe("係數類型，用來區分固定燃燒與移動燃燒等。"),
+  year: z.number().int().min(1990).max(2100).optional().describe("適用年度（西元）。"),
+  unit: z.string().max(20).optional().describe("係數分母的單位，例如 kWh、m3、TJ。"),
+  limit: z.number().int().min(1).max(MAX_LIMIT).optional().describe(`回傳筆數，預設 10，上限 ${MAX_LIMIT}。`),
+  offset: z.number().int().min(0).optional().describe("略過前幾筆（分頁用）。"),
+};
+
+export const electricityShape = {
+  year: z.number().int().min(1990).max(2100).describe("適用年度（西元），例如 2025。"),
+  usage_type: z
+    .enum(USAGE_TYPES)
+    .optional()
+    .describe("用途別（114 年度起才有劃分）：industry_inventory 產業盤查使用；residential_tariff 表燈非營業與包燈用戶；utility_average 公用售電業整體平均。不給就回該年度全部數值。"),
+};
+
+export const batchShape = {
+  items: z.array(calcSchema).min(1).max(MAX_BATCH).describe(`要計算的活動，最多 ${MAX_BATCH} 筆。`),
+};
+
+export const compareShape = {
+  baseline: calcSchema.describe("基準（例如去年）。"),
+  comparison: calcSchema.describe("比較對象（例如今年）。"),
+};
+
+export interface ToolContext {
+  db: D1Database;
+  now: Date;
+}
+
+export interface ToolDef {
+  name: string;
+  title: string;
+  /** 英文在前、繁體中文在後。 */
+  description: string;
+  /** 網站與 llms.txt 用的一句話說明。 */
+  summary: { zh: string; en: string; ja: string };
+  shape: Record<string, z.ZodType>;
+  run: (args: never, ctx: ToolContext) => unknown;
+}
+
+const def = <S extends Record<string, z.ZodType>>(
+  d: Omit<ToolDef, "shape" | "run"> & { shape: S; run: (args: z.infer<z.ZodObject<S>>, ctx: ToolContext) => unknown },
+): ToolDef => d as unknown as ToolDef;
+
+export const TOOLS: ToolDef[] = [
+  def({
+    name: "ping",
+    title: "Ping",
+    description: "Check that the service is up. Returns status, service name, version and server time. 確認服務狀態，回傳狀態、服務名稱、版本與伺服器時間。",
+    summary: { zh: "確認服務是否正常。", en: "Check that the service is up.", ja: "サービスの稼働状況を確認します。" },
+    shape: {},
+    run: (_a, { now }) => ping(now),
+  }),
+  def({
+    name: "list_data_sources",
+    title: "List data sources",
+    description:
+      "List the official Taiwan government sources behind this service, with dataset codes, URLs, licence, sync status and how many factors each holds. 列出本服務整合的官方資料來源：資料集代碼、網址、授權、同步狀態與係數數量。",
+    summary: { zh: "列出已整合的官方資料來源與狀態。", en: "List the official data sources and their status.", ja: "統合済みの公式データソースと状態を一覧します。" },
+    shape: {},
+    run: (_a, { db }) => listDataSources(db),
+  }),
+  def({
+    name: "search_emission_factors",
+    title: "Search emission factors",
+    description:
+      "Search official Taiwan emission factors by keyword, category, type, year or unit. Returns factor IDs to pass to get_emission_factor and calculate_emissions. Covers electricity, tap water and fuel combustion; returns an explicit not-found message rather than a near match. 以關鍵字、類別、類型、年度或單位搜尋台灣官方排放係數，回傳的係數 ID 可交給 get_emission_factor 與 calculate_emissions。目前收錄電力、自來水與燃料燃燒；查不到會明確說明，不會給相近的替代品。",
+    summary: { zh: "以關鍵字、類別、年度搜尋排放係數。", en: "Search emission factors by keyword, category or year.", ja: "キーワード・分類・年度で排出係数を検索します。" },
+    shape: searchShape,
+    run: (a, { db }) => search(db, a),
+  }),
+  def({
+    name: "get_emission_factor",
+    title: "Get emission factor",
+    description:
+      "Get one factor in full by ID: the original government record, unit, applicable year, boundary, official source, version, whether it can be used for calculation directly, and usage limits. Find the ID with search_emission_factors first. 依係數 ID 取得完整資訊：官方原始紀錄、單位、適用年度、計算邊界、官方來源、版本、是否可直接計算與使用限制。請先用 search_emission_factors 找到 ID。",
+    summary: { zh: "取得單一係數的完整資訊與使用限制。", en: "Get one factor in full, with its usage limits.", ja: "係数1件の詳細と利用上の制約を取得します。" },
+    shape: {
+      factor_id: z.string().min(1).max(120).describe("係數 ID，來自 search_emission_factors。"),
+      version: z.number().int().min(1).optional().describe("指定版本；不給就是目前版本。"),
+    },
+    run: (a, { db }) => factorDetail(db, a.factor_id, a.version),
+  }),
+  def({
+    name: "get_electricity_factor",
+    title: "Get electricity factor",
+    description:
+      "Get Taiwan's official electricity emission factor (kgCO2e/kWh) for a given year, published by the Energy Administration. From the 2025 factor year there are three values by usage; earlier years have one. Never substitutes another year: if the year is missing it says so and lists the years available. 查詢經濟部能源署公布的指定年度電力排碳係數（公斤CO2e/度）。114 年度（2025）起依用途有三個數值，之前每年一個。不會以其他年度代替：該年度沒有資料時會明說並列出可用年度。",
+    summary: { zh: "查詢指定年度的台灣電力排碳係數。", en: "Get Taiwan's electricity emission factor for a year.", ja: "指定年度の台湾の電力排出係数を取得します。" },
+    shape: electricityShape,
+    run: (a, { db }) => electricity(db, a.year, a.usage_type),
+  }),
+  def({
+    name: "calculate_emissions",
+    title: "Calculate emissions",
+    description:
+      "Calculate emissions for one activity: activity data × an official factor from the database. Checks units, the applicable year and whether the factor may be used for calculation, and returns the formula, kg and tonnes, the factor version and the source URL. Returns a clear error instead of guessing when the unit is incompatible, the year does not match or required data is missing (fuel factors need a user-supplied lower heating value). 計算單一活動的排放量：活動數據 × 資料庫中的官方係數。會檢查單位、適用年度與係數是否可用於計算，回傳公式、公斤與公噸、係數版本與來源網址。單位不相容、年度不符或缺少必要資料時（燃料係數需要使用者提供低位熱值）回傳明確錯誤，不會猜測。",
+    summary: { zh: "用官方係數計算單一活動的排放量。", en: "Calculate emissions for one activity with an official factor.", ja: "公式係数で1件の活動の排出量を計算します。" },
+    shape: calcShape,
+    run: (a, { db, now }) => calculateOne(db, toRequest(a), now),
+  }),
+  def({
+    name: "calculate_batch",
+    title: "Calculate batch",
+    description:
+      "Calculate several activities at once, each with its own factor and source. A total is given only when every item succeeded and the items share a gas basis and boundary type; otherwise the reason is stated. 批次計算多筆活動，逐筆回傳結果與來源。只有全部成功、氣體基礎與邊界類型一致時才提供合計，否則說明不提供的原因。",
+    summary: { zh: "批次計算多筆活動，條件相容時才給合計。", en: "Calculate several activities; totals only when compatible.", ja: "複数の活動を一括計算します。条件が揃う場合のみ合計を返します。" },
+    shape: batchShape,
+    run: (a, { db, now }) => calculateBatch(db, a.items.map(toRequest), now),
+  }),
+  def({
+    name: "compare_emissions",
+    title: "Compare emissions",
+    description:
+      "Compare two calculations (for example two years). Separates the effect of changed activity data from the effect of a changed factor, and flags when the calculation method differs so the difference is not read as an actual reduction. 比較兩筆計算（例如不同年度）。區分活動量改變與排放係數改變的影響；計算方法不同時會標示，避免把差異誤讀為實際減碳成效。",
+    summary: { zh: "比較兩筆排放量，區分活動量與係數的影響。", en: "Compare two results, separating activity and factor effects.", ja: "2件の排出量を比較し、活動量と係数の影響を分けて示します。" },
+    shape: compareShape,
+    run: (a, { db, now }) => compareEmissions(db, toRequest(a.baseline), toRequest(a.comparison), now),
+  }),
+  def({
+    name: "list_factor_versions",
+    title: "List factor versions",
+    description: "List every recorded version of one factor, newest first. Old versions are kept so past calculations can be reproduced. 列出指定係數的所有歷史版本（新的在前）。舊版本會保留，讓過去的計算可以重現。",
+    summary: { zh: "列出係數的歷史版本。", en: "List a factor's version history.", ja: "係数の改訂履歴を一覧します。" },
+    shape: { factor_id: z.string().min(1).max(120).describe("係數 ID，來自 search_emission_factors。") },
+    run: (a, { db }) => factorVersions(db, a.factor_id),
+  }),
+  def({
+    name: "check_factor_updates",
+    title: "Check factor updates",
+    description:
+      "Show the sync status of each official source: when it was last checked, whether the data may be stale, and whether a difference from the official data is waiting for review. Read-only; it cannot trigger a sync or write anything. 查看各官方來源的同步狀態：最近檢查時間、資料是否可能過期、是否有與官方資料不一致而待審核的項目。唯讀，不能觸發同步或寫入。",
+    summary: { zh: "查看各資料來源的同步與更新狀態。", en: "Show each source's sync and update status.", ja: "各データソースの同期・更新状況を表示します。" },
+    shape: {},
+    run: (_a, { db }) => updateStatus(db),
+  }),
+  def({
+    name: "get_methodology",
+    title: "Get methodology",
+    description:
+      "Explain the calculation methods, scope, data limits and official references. Read this before interpreting results or combining different kinds of factors. 說明計算方法、適用範圍、資料限制與官方依據。解讀結果或合併不同類型的係數之前請先閱讀。",
+    summary: { zh: "說明計算方法、適用範圍與資料限制。", en: "Explain the methods, scope and data limits.", ja: "計算方法・適用範囲・データの制約を説明します。" },
+    shape: { topic: z.enum(METHODOLOGY_TOPICS as [string, ...string[]]).optional().describe("主題；不給就回全部。") },
+    run: (a) => methodology(a.topic as (typeof METHODOLOGY_TOPICS)[number] | undefined),
+  }),
+];

@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "carbon-mcp",
+  "main": "src/server.ts",
+  "compatibility_date": "2026-06-11",
+  "compatibility_flags": ["nodejs_compat"],
+  // workers.dev 關閉：否則 workers.dev 的來源會繞過 taux.io zone 的 WAF 與限流規則。
+  "workers_dev": false,
+  "routes": [{ "pattern": "carbon.taux.io", "custom_domain": true }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "carbon-mcp",
+      // 正式部署前以 `wrangler d1 create carbon-mcp` 建立後填入。本機開發不需要真的 ID。
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // 每個來源 IP 每 60 秒 120 次，/mcp 與 /api/* 共用。
+  "ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }],
+  // 每天 03:30（台灣時間）：匯入已審核資料（內容沒變就不動）、交叉檢查能源署 CSV、同步環境部 CFP_P_02（有金鑰才跑）。
+  "triggers": { "crons": ["30 19 * * *"] },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "enabled": true, "head_sampling_rate": 1, "persist": true, "invocation_logs": true },
+    "traces": { "enabled": false, "persist": true, "head_sampling_rate": 1 }
+  }
+}

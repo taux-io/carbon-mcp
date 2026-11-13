@@ -1,0 +1,27 @@
+# --- Node / Cloudflare Workers (TS) ---
+node_modules/
+dist/
+.wrangler/
+*.tsbuildinfo
+
+# --- macOS ---
+.DS_Store
+
+# --- 本機 secret（wrangler 的 .dev.vars、各種 .env；範本用 .example 結尾）---
+.dev.vars*
+.env*
+!.dev.vars.example
+!.env.example
+
+# --- 本機工具設定（因人而異，不進版控）---
+.claude/settings.local.json
+
+# --- 私有工作區（安全性 spec／票，不進公開版控）---
+.scratch/
+wrangler.log
+
+# --- Impeccable：每人自己的 hook 同意紀錄 ---
+.impeccable/config.local.json
+
+# --- 私有的資安審查報告 ---
+docs/security-review-*.md
