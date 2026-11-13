@@ -43,7 +43,7 @@ try {
   const h = await health.json();
   check("GET /health", health.status === 200 && h.database === "ok", JSON.stringify(h));
 
-  for (const path of ["/", "/en", "/ja", "/tools", "/api/docs", "/privacy", "/llms.txt", "/llms-full.txt", "/robots.txt", "/sitemap.xml", "/og.png", "/favicon.ico", "/favicon.svg", "/apple-touch-icon.png"]) {
+  for (const path of ["/", "/en", "/ja", "/tools", "/api/docs", "/privacy", "/terms", "/llms.txt", "/llms-full.txt", "/robots.txt", "/sitemap.xml", "/og.png", "/favicon.ico", "/favicon.svg", "/apple-touch-icon.png"]) {
     const res = await fetch(`${base}${path}`);
     check(`GET ${path}`, res.status === 200, `${res.status}`);
   }
