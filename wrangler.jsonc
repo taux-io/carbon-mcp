@@ -11,8 +11,7 @@
     {
       "binding": "DB",
       "database_name": "carbon-mcp",
-      // 正式部署前以 `wrangler d1 create carbon-mcp` 建立後填入。本機開發不需要真的 ID。
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "7473083b-cacb-4fd9-bd5c-da3d5e2073f9",
       "migrations_dir": "migrations"
     }
   ],
